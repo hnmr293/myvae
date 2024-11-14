@@ -73,3 +73,8 @@ class VAE(nn.Module):
         y = self.decode(z)
         
         return VAEOutput(encoded, y)
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        self.encoder.apply_gradient_checkpointing(enabled)
+        self.decoder.apply_gradient_checkpointing(enabled)
+        return self

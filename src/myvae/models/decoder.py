@@ -1,5 +1,8 @@
+import functools
+
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 from .configs import DecoderConfig
 from .up import DecoderBlock
@@ -31,15 +34,35 @@ class Decoder(nn.Module):
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
+    @property
+    def _up_blocks(self):
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.up_blocks
+            ]
+        else:
+            return self.up_blocks
+    
+    @property
+    def _mid_blocks(self):
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.mid_blocks
+            ]
+        else:
+            return self.mid_blocks
+    
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         x = z
         
         x = self.conv_in(x)
         
-        for block in self.mid_blocks:
+        for block in self._mid_blocks:
             x = block(x)
         
-        for block in self.up_blocks:
+        for block in self._up_blocks:
             x = block(x)
         
         x = self.norm_out(x)
@@ -47,3 +70,7 @@ class Decoder(nn.Module):
         x = self.conv_out(x)
         
         return x
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        self.gradient_checkpointing = enabled
+        return self
