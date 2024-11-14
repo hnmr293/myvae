@@ -69,6 +69,7 @@ def train(model: vae.VAE, data: DataLoader):
 
 def main():
     model, data = prepare()
+    model = torch.compile(model, fullgraph=True)
     train(model, data)
 
 
