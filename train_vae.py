@@ -12,6 +12,9 @@ N_DATA = 1024
 BATCH_SIZE = 2
 TOTAL_STEPS = N_DATA * N_EPOCHS // BATCH_SIZE
 LR = 1e-4
+GRAD_ACC = 16
+
+assert (N_DATA // BATCH_SIZE) % GRAD_ACC == 0
 
 
 def prepare():
@@ -23,6 +26,7 @@ def prepare():
         DummyDataset((3, 512, 512), total_size=N_DATA),
         batch_size=BATCH_SIZE,
         shuffle=False,
+        drop_last=True,
     )
     
     return model, data
@@ -40,21 +44,27 @@ def train(model: vae.VAE, data: DataLoader):
     for epoch in range(N_EPOCHS):
         with tqdm.tqdm(data) as pbar:
             pbar.set_description(f'[Epoch {epoch}]')
+            
             for step, batch in enumerate(pbar):
-                optimizer.zero_grad()
-                
                 with torch.autocast(device_type=device.type):
                     batch = batch.to(dtype=dtype, device=device)
                     x: vae.VAEOutput = model(batch)
                     x = x.decoder_output.value
                     loss = torch.nn.functional.mse_loss(x, torch.zeros_like(x))
+                    loss = loss / GRAD_ACC
                 
                 scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
                 
-                pbar.set_postfix(loss=loss.item())
+                if (step + 1) % GRAD_ACC == 0:
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
+                
+                pbar.set_postfix(loss=loss.item() * GRAD_ACC)
                 global_steps += 1
+            
+            # epoch end
+            pass
 
 
 def main():
