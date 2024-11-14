@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import overload
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as tf
@@ -8,33 +11,71 @@ from .mid import MidBlock
 from .up import DecoderBlock
 
 
+@dataclass
+class EncoderOutput:
+    mean: torch.Tensor
+    logvar: torch.Tensor
+    
+    @property
+    def var(self):
+        # exp({log s^2}) = s^2
+        return torch.exp(self.logvar)
+    
+    @property
+    def std(self):
+        # exp({log (s^2)}/2) = {exp(log s^2)}^(1/2) = (s^2)^(1/2) = s
+        return torch.exp(self.logvar / 2)
+    
+    def sample(self, rng: torch.Generator|None = None):
+        a = self.mean
+        e = torch.randn(a.shape, generator=rng, dtype=a.dtype, device=a.device)
+        z = a + self.std * e
+        # e ~ N(a,std^2)
+        return z
+
+
+@dataclass
+class DecoderOutput:
+    value: torch.Tensor
+
+
+@dataclass
+class VAEOutput:
+    encoder_output: EncoderOutput
+    decoder_output: DecoderOutput
+
+
 class VAE(nn.Module):
     def __init__(self, config: VAEConfig):
         super().__init__()
         self.encoder = Encoder(config.encoder)
         self.decoder = Decoder(config.decoder)
     
+    def encode(self, x: torch.Tensor) -> EncoderOutput:
+        z = self.encoder(x)
+        z_mean, z_logvar = z.chunk(2, dim=1)
+        return EncoderOutput(z_mean, z_logvar)
+    
+    def decode(self, z: torch.Tensor) -> DecoderOutput:
+        x = self.decoder(z)
+        return DecoderOutput(x)
+    
     def forward(
         self,
         x: torch.Tensor,
         det: bool = False,
         rng: torch.Generator|None = None
-    ) -> torch.Tensor:
-        z = self.encoder(x)
-        
-        z_mean, z_logvar = z.chunk(2, dim=1)
-        z_std = torch.exp(z_logvar / 2)  # exp({log (s^2)}/2) = {exp(log s^2)}^(1/2) = (s^2)^(1/2) = s
+    ) -> VAEOutput:
+        encoded = self.encode(x)
         
         if det:
-            z = z_mean
+            z = encoded.mean
         else:
-            e = torch.randn(z_mean.shape, generator=rng, dtype=z_mean.dtype, device=z_mean.device)
-            # e ~ N(0,I)
-            z = z_mean + z_std * e
+            z = encoded.sample(rng)
         
-        y = self.decoder(z)
+        y = self.decode(z)
         
-        return y, z, z_mean, z_std
+        return VAEOutput(encoded, y)
 
 
 class Encoder(nn.Module):
