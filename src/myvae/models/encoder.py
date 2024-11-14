@@ -36,6 +36,14 @@ class Encoder(nn.Module):
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
     @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device
+    
+    @property
     def _down_blocks(self):
         if self.training and getattr(self, 'gradient_checkpointing', False):
             return [

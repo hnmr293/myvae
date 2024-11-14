@@ -48,6 +48,14 @@ class VAE(nn.Module):
         self.encoder = Encoder(config.encoder)
         self.decoder = Decoder(config.decoder)
     
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device
+    
     def encode(self, x: torch.Tensor) -> EncoderOutput:
         z = self.encoder(x)
         z_mean, z_logvar = z.chunk(2, dim=1)
