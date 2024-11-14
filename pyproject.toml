@@ -1,0 +1,17 @@
+[project]
+name = "myvae"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "hnmr", email = "hnmr293@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.5.1",
+    "torchvision>=0.20.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
