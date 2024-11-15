@@ -12,7 +12,7 @@ class TrainConfParams:
     batch_size: int = 32
     grad_acc_steps: int = 1
     use_gradient_checkpointing: bool = False
-    compile: bool = False
+    log_freq: int = 50
     optimizer: Callable[[Iterable], torch.optim.Optimizer] #= field(default_factory=partial(torch.optim.AdamW, lr=1e-4))
     scheduler: Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler.LRScheduler] #= field(default_factory=partial(torch.optim.lr_scheduler.ConstantLR, factor=1.0, total_iters=0))
 

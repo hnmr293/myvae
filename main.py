@@ -26,6 +26,8 @@ def train(
     
     model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
     
+    log_freq = train_conf.log_freq
+    
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
             pbar.set_description(f'[Epoch {epoch}]')
@@ -43,7 +45,7 @@ def train(
                 
                 pbar.set_postfix(loss=loss.item())
                 
-                if (global_steps + 1) % 50 == 0:
+                if 0 < log_freq and (global_steps + 1) % log_freq == 0:
                     acc.log({
                         'train/loss': loss.item(),
                     }, step=global_steps)

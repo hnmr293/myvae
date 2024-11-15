@@ -20,12 +20,13 @@ model:
     config:
         encoder: {}
         decoder: {}
-                
+
 train:
     n_epochs: 100
-    batch_size: 8
-    grad_acc_steps: 4
-    use_gradient_checkpointing: true
+    batch_size: 4
+    grad_acc_steps: 8
+    use_gradient_checkpointing: false
+    log_freq: 16
     optimizer:
         class_path: torch.optim.AdamW
         init_args:
