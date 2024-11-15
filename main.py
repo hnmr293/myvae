@@ -35,7 +35,7 @@ def train(
                     x = batch
                     out: VAEOutput = model(x)
                     y = out.decoder_output.value
-                    loss = torch.nn.functional.mse_loss(y, torch.zeros_like(y))
+                    loss = torch.nn.functional.mse_loss(y, x)
                     acc.backward(loss)
                     optimizer.step()
                     scheduler.step()
@@ -53,26 +53,38 @@ def train(
         # epoch end
         
         # validation
-        val_resuls: list[VAEOutput] = []
+        val_results: list[VAEOutput] = []
+        val_losses: list[torch.Tensor] = []
         with torch.inference_mode(), acc.autocast():
             for batch in val_data:
                 x = batch
-                y: VAEOutput = model(x)
-                val_resuls.append(y)
+                out: VAEOutput = model(x)
+                y = out.decoder_output.value
+                loss = torch.nn.functional.mse_loss(y, x)
+                val_results.append(out)
+                val_losses.append(loss)
         
         if acc.is_main_process:
-            val_resuls = gather_object(val_resuls)
+            val_results = gather_object(val_results)
+            val_loss = torch.mean(torch.cat([loss.reshape(-1) for loss in gather_object(val_losses)], dim=0))
+            
             # compute validation loss
-            #acc.log({
-            #    'val/loss': ...
-            #})
+            acc.log({
+                'val/loss': val_loss.item()
+            })
+            
             # create images
-            val_images = []
-            for val_result in val_resuls:
-                val_image = val_result.decoder_output.value.clamp(0, 1)
-                val_images.extend(val_image)
-            nrow = (len(val_images) ** 0.5).__ceil__()
-            image: Image.Image = tvf.to_pil_image(make_grid(val_images, nrow=nrow))
+            input_images = []
+            generated_images = []
+            for val_result in val_results:
+                inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
+                input_images.extend(inp_image)
+                gen_image = val_result.decoder_output.value.clamp(0, 1)
+                generated_images.extend(gen_image)
+            nrow = (len(input_images) ** 0.5).__ceil__()
+            image_left = make_grid(input_images, nrow=nrow)
+            image_right = make_grid(generated_images, nrow=nrow)
+            image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
             #image.save(f'val.{epoch}.png')
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],

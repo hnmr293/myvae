@@ -38,6 +38,7 @@ class DecoderOutput:
 
 @dataclass
 class VAEOutput:
+    input: torch.Tensor
     encoder_output: EncoderOutput
     decoder_output: DecoderOutput
 
@@ -80,7 +81,7 @@ class VAE(nn.Module):
         
         y = self.decode(z)
         
-        return VAEOutput(encoded, y)
+        return VAEOutput(x, encoded, y)
     
     def apply_gradient_checkpointing(self, enabled: bool = True):
         self.encoder.apply_gradient_checkpointing(enabled)
