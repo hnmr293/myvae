@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import tqdm
 
 import myvae as vae
-from train.dataset import DummyDataset
+from myvae.train.dataset import DummyDataset
 
 
 N_EPOCHS = 100

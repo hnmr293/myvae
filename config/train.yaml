@@ -1,0 +1,33 @@
+dataset:
+    class_path: myvae.train.dataset.DummyDataset
+    init_args:
+        shape: [3, 512, 512]
+        total_size: 1024
+        seed: 42
+
+dataloader:
+    class_path: torch.utils.data.DataLoader
+    init_args:
+        shuffle: false
+        drop_last: true
+
+model:
+    config:
+        encoder: {}
+        decoder: {}
+                
+train:
+    n_epochs: 100
+    batch_size: 2
+    grad_acc_steps: 16
+    use_gradient_checkpointing: true
+    compile: false
+    optimizer:
+        class_path: torch.optim.AdamW
+        init_args:
+            lr: 1e-4
+    scheduler:
+        class_path: torch.optim.lr_scheduler.ConstantLR
+        init_args:
+            factor: 1.0
+            total_iters: 0

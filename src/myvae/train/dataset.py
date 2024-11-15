@@ -1,3 +1,4 @@
+from typing import Sequence
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -5,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 class DummyDataset(Dataset):
     def __init__(
         self,
-        shape: tuple[int],
+        shape: Sequence[int],
         total_size: int = 1024,
         dtype: torch.dtype = torch.float32,
         seed: int = 42

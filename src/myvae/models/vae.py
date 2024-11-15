@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from .configs import VAEConfig
+from .configs import VAEConfig, EncoderConfig, DecoderConfig
 from .encoder import Encoder
 from .decoder import Decoder
 
