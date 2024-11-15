@@ -84,7 +84,7 @@ def train(
             for val_result in val_results:
                 inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
                 input_images.extend(inp_image)
-                gen_image = val_result.decoder_output.value.clamp(0, 1)
+                gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
                 generated_images.extend(gen_image)
             nrow = (len(input_images) ** 0.5).__ceil__()
             image_left = make_grid(input_images, nrow=nrow)
