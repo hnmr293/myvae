@@ -28,6 +28,7 @@ train:
     use_gradient_checkpointing: false
     log_freq: 16
     save_every_n_epochs: 5
+    hf_repo_id: 'hnmr293/vae-test'
     optimizer:
         class_path: torch.optim.AdamW
         init_args:

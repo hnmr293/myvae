@@ -90,18 +90,21 @@ def train(
             image_left = make_grid(input_images, nrow=nrow)
             image_right = make_grid(generated_images, nrow=nrow)
             image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
-            #image.save(f'val.{epoch}.png')
+            
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],
             }, step=global_steps-1)
             
             if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
+                name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
+                dir = acc.get_tracker('wandb').run.id
                 save_model(
-                    f'{epoch:05d}_{global_steps-1:08d}.ckpt',
+                    f'{dir}/{name}',
                     hparam_config,
                     acc.unwrap_model(model),
                     acc.unwrap_model(optimizer),
                     acc.unwrap_model(scheduler),
+                    train_conf.hf_repo_id,
                 )
 
         acc.wait_for_everyone()
@@ -113,6 +116,7 @@ def save_model(
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
+    hf_repo_id: str|None,
 ):
     model_sd = model.state_dict()
     opt_sd = optimizer.state_dict()
@@ -125,7 +129,24 @@ def save_model(
         'config': config,
     }
     
-    torch.save(sd, path)
+    if hf_repo_id is None:
+        import os
+        dir = Path(path).parent
+        os.makedirs(dir, exist_ok=True)
+        torch.save(sd, path)
+    else:
+        from io import BytesIO
+        from huggingface_hub import HfApi
+        io = BytesIO()
+        torch.save(sd, io)
+        io.seek(0)
+        
+        api = HfApi()
+        api.upload_file(
+            path_or_fileobj=io,
+            path_in_repo=path,
+            repo_id=hf_repo_id,
+        )
 
 
 def load_model(path: str|Path, init):
