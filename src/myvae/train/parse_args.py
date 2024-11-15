@@ -43,6 +43,7 @@ def parse_config(path: Path):
     from jsonargparse import ArgumentParser
     p = ArgumentParser()
     p.add_dataclass_arguments(TrainConfParams, 'train')
+    p.add_argument('--project', type=str)
     p.add_argument('--dataset', type=torch.utils.data.Dataset)
     p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
     p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])

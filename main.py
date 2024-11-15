@@ -3,13 +3,16 @@ import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
 from torchvision.utils import make_grid
-import tqdm
+from accelerate import Accelerator
+from accelerate.utils import tqdm, gather_object
+import wandb
 
 from myvae import VAE, VAEOutput
 from myvae.train import TrainConf
 
 
 def train(
+    acc: Accelerator,
     model: VAE,
     data: DataLoader,
     val_data: DataLoader,
@@ -17,45 +20,52 @@ def train(
 ):
     global_steps = 0
     
-    dtype = model.dtype
-    device = model.device
-    
-    scaler = torch.GradScaler(device=device.type)
+    #scaler = torch.GradScaler()  # Accelerator has its own GradScaler
     optimizer = train_conf.optimizer
     scheduler = train_conf.scheduler
     
+    model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
+    
     for epoch in range(train_conf.n_epochs):
-        with tqdm.tqdm(data) as pbar:
+        with tqdm(data) as pbar:
             pbar.set_description(f'[Epoch {epoch}]')
             
             for step, batch in enumerate(pbar):
-                with torch.autocast(device_type=device.type):
-                    x = batch.to(dtype=dtype, device=device)
+                with acc.autocast(), acc.accumulate(model):
+                    x = batch
                     out: VAEOutput = model(x)
                     y = out.decoder_output.value
                     loss = torch.nn.functional.mse_loss(y, torch.zeros_like(y))
-                    loss = loss / train_conf.grad_acc_steps
-                
-                scaler.scale(loss).backward()
-                
-                if (step + 1) % train_conf.grad_acc_steps == 0:
-                    scaler.step(optimizer)
-                    scaler.update()
+                    acc.backward(loss)
+                    optimizer.step()
+                    scheduler.step()
                     optimizer.zero_grad()
-                scheduler.step()
                 
-                pbar.set_postfix(loss=loss.item() * train_conf.grad_acc_steps)
+                pbar.set_postfix(loss=loss.item())
+                
+                if (global_steps + 1) % 50 == 0:
+                    acc.log({
+                        'train/loss': loss.item(),
+                    }, step=global_steps)
+                
                 global_steps += 1
             
-            # epoch end
-            # validation
-            val_resuls: list[VAEOutput] = []
-            with torch.inference_mode(), torch.autocast(device_type=device.type):
-                for batch in val_data:
-                    batch = batch.to(dtype=dtype, device=device)
-                    x: VAEOutput = model(batch)
-                    val_resuls.append(x)
+        # epoch end
+        
+        # validation
+        val_resuls: list[VAEOutput] = []
+        with torch.inference_mode(), acc.autocast():
+            for batch in val_data:
+                x = batch
+                y: VAEOutput = model(x)
+                val_resuls.append(y)
+        
+        if acc.is_main_process:
+            val_resuls = gather_object(val_resuls)
             # compute validation loss
+            #acc.log({
+            #    'val/loss': ...
+            #})
             # create images
             val_images = []
             for val_result in val_resuls:
@@ -63,8 +73,12 @@ def train(
                 val_images.extend(val_image)
             nrow = (len(val_images) ** 0.5).__ceil__()
             image: Image.Image = tvf.to_pil_image(make_grid(val_images, nrow=nrow))
-            image.save(f'val.{epoch}.png')
+            #image.save(f'val.{epoch}.png')
+            acc.get_tracker('wandb').log({
+                'val/image': [wandb.Image(image)],
+            }, step=global_steps-1)
 
+        acc.wait_for_everyone()
 
 def train_init(model: VAE, train_conf: TrainConf):
     model.train()
@@ -72,20 +86,19 @@ def train_init(model: VAE, train_conf: TrainConf):
     
     if train_conf.use_gradient_checkpointing:
         model.apply_gradient_checkpointing()
-    
-    if train_conf.compile:
-        torch.compile(model, fullgraph=True)
-    
-    model.cuda()
-    
-    # suppress warning
-    setattr(train_conf.optimizer, '_opt_called', True)
 
 
 def main():
-    from myvae.train import load_config_from_arg
+    import yaml
+    from myvae.train import parse_config_path, parse_config
     
-    conf = load_config_from_arg()
+    conf_path = parse_config_path()
+    
+    # for logger
+    with open(conf_path) as io:
+        conf_yaml = yaml.load(io, Loader=yaml.SafeLoader)
+    
+    conf = parse_config(conf_path)
     
     model = conf.model
     data = conf.dataloader
@@ -94,7 +107,20 @@ def main():
     
     train_init(model, train_conf)
     
-    train(model, data, val_data, train_conf)
+    acc = Accelerator(
+        log_with='wandb',
+        gradient_accumulation_steps=train_conf.grad_acc_steps,
+    )
+    
+    acc.init_trackers(
+        project_name=conf.project,
+        config=conf_yaml,
+    )
+    
+    try:
+        train(acc, model, data, val_data, train_conf)
+    finally:
+        acc.end_training()
 
 
 if __name__ == '__main__':
