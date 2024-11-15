@@ -117,7 +117,7 @@ def train(
                 acc.get_tracker('wandb').log({
                     'val/psnr': torch.mean(val_psnr).item(),
                     'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
-                })
+                }, step=global_steps-1)
                 
                 
                 if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
