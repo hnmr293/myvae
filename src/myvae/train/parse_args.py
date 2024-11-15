@@ -17,6 +17,7 @@ class TrainConfParams:
     optimizer: Callable[[Iterable], torch.optim.Optimizer] #= field(default_factory=partial(torch.optim.AdamW, lr=1e-4))
     scheduler: Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler.LRScheduler] #= field(default_factory=partial(torch.optim.lr_scheduler.ConstantLR, factor=1.0, total_iters=0))
     save_every_n_epochs: int = 1
+    loss: list[dict]|None = None
     hf_repo_id: str|None = None
 
 

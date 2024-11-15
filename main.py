@@ -10,6 +10,7 @@ import wandb
 
 from myvae import VAE, VAEOutput
 from myvae.train import TrainConf
+import myvae.train.loss as losses
 
 
 def train(
@@ -31,6 +32,12 @@ def train(
     log_freq = train_conf.log_freq
     save_epochs = train_conf.save_every_n_epochs
     
+    loss_fn = losses.Compose()
+    for loss_dict in (train_conf.loss or []):
+        loss_name, loss_weight = loss_dict['type'], loss_dict['weight']
+        loss_fn.add(loss_name, loss_weight)
+    
+    
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
             pbar.set_description(f'[Epoch {epoch}]')
@@ -38,9 +45,8 @@ def train(
             for step, batch in enumerate(pbar):
                 with acc.autocast(), acc.accumulate(model):
                     x = batch
-                    out: VAEOutput = model(x)
-                    y = out.decoder_output.value
-                    loss = torch.nn.functional.mse_loss(y, x)
+                    y: VAEOutput = model(x)
+                    loss = loss_fn(y, x)
                     acc.backward(loss)
                     optimizer.step()
                     scheduler.step()
@@ -63,10 +69,9 @@ def train(
         with torch.inference_mode(), acc.autocast():
             for batch in val_data:
                 x = batch
-                out: VAEOutput = model(x)
-                y = out.decoder_output.value
-                loss = torch.nn.functional.mse_loss(y, x)
-                val_results.append(out)
+                y: VAEOutput = model(x)
+                loss = loss_fn(y, x)
+                val_results.append(y)
                 val_losses.append(loss)
         
         if acc.is_main_process:
