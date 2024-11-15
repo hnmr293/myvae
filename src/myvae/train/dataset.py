@@ -32,11 +32,14 @@ class WebpDataset(Dataset):
     def __init__(
         self,
         data_dir: Path,
+        limit: int|None = None,
     ):
         super().__init__()
         import glob
         self.data_dir = Path(data_dir)
         self.data = glob.glob(str(self.data_dir / '*.webp'))
+        if 0 < (limit or 0):
+            self.data = self.data[:limit]
         self.transform = tvt.Compose([
             tvt.ToTensor(),
             tvt.Normalize([0.5], [0.5])
