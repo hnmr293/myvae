@@ -1,9 +1,12 @@
 dataset:
-    class_path: myvae.train.dataset.DummyDataset
+    class_path: myvae.train.dataset.WebpDataset
     init_args:
-        shape: [3, 512, 512]
-        total_size: 1024
-        seed: 42
+        data_dir: 'data/256x256/train'
+
+val_dataset:
+    class_path: myvae.train.dataset.WebpDataset
+    init_args:
+        data_dir: 'data/256x256/val'
 
 dataloader:
     class_path: torch.utils.data.DataLoader
@@ -18,8 +21,8 @@ model:
                 
 train:
     n_epochs: 100
-    batch_size: 2
-    grad_acc_steps: 16
+    batch_size: 8
+    grad_acc_steps: 4
     use_gradient_checkpointing: true
     compile: false
     optimizer:

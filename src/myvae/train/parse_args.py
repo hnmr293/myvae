@@ -44,13 +44,16 @@ def parse_config(path: Path):
     p = ArgumentParser()
     p.add_dataclass_arguments(TrainConfParams, 'train')
     p.add_argument('--dataset', type=torch.utils.data.Dataset)
+    p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
     p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
     p.add_class_arguments(myvae.VAE, 'model')
     
     cfg = p.parse_path(path)
     init = p.instantiate_classes(cfg)
     
-    init.dataloader = init.dataloader(init.dataset, init.train.batch_size)
+    dataloader_class = init.dataloader
+    init.dataloader = dataloader_class(init.dataset, init.train.batch_size)
+    init.val_dataloader = dataloader_class(init.val_dataset, 1)
     init.train.optimizer = init.train.optimizer(init.model.parameters())
     init.train.scheduler = init.train.scheduler(init.train.optimizer)
     

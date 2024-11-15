@@ -1,12 +1,20 @@
+from PIL import Image
 import torch
 from torch.utils.data import DataLoader
+import torchvision.transforms.functional as tvf
+from torchvision.utils import make_grid
 import tqdm
 
 from myvae import VAE, VAEOutput
 from myvae.train import TrainConf
 
 
-def train(model: VAE, data: DataLoader, train_conf: TrainConf):
+def train(
+    model: VAE,
+    data: DataLoader,
+    val_data: DataLoader,
+    train_conf: TrainConf,
+):
     global_steps = 0
     
     dtype = model.dtype
@@ -22,10 +30,10 @@ def train(model: VAE, data: DataLoader, train_conf: TrainConf):
             
             for step, batch in enumerate(pbar):
                 with torch.autocast(device_type=device.type):
-                    batch = batch.to(dtype=dtype, device=device)
-                    x: VAEOutput = model(batch)
-                    x = x.decoder_output.value
-                    loss = torch.nn.functional.mse_loss(x, torch.zeros_like(x))
+                    x = batch.to(dtype=dtype, device=device)
+                    out: VAEOutput = model(x)
+                    y = out.decoder_output.value
+                    loss = torch.nn.functional.mse_loss(y, torch.zeros_like(y))
                     loss = loss / train_conf.grad_acc_steps
                 
                 scaler.scale(loss).backward()
@@ -41,8 +49,21 @@ def train(model: VAE, data: DataLoader, train_conf: TrainConf):
             
             # epoch end
             # validation
-            
-            pass
+            val_resuls: list[VAEOutput] = []
+            with torch.inference_mode(), torch.autocast(device_type=device.type):
+                for batch in val_data:
+                    batch = batch.to(dtype=dtype, device=device)
+                    x: VAEOutput = model(batch)
+                    val_resuls.append(x)
+            # compute validation loss
+            # create images
+            val_images = []
+            for val_result in val_resuls:
+                val_image = val_result.decoder_output.value.clamp(0, 1)
+                val_images.extend(val_image)
+            nrow = (len(val_images) ** 0.5).__ceil__()
+            image: Image.Image = tvf.to_pil_image(make_grid(val_images, nrow=nrow))
+            image.save(f'val.{epoch}.png')
 
 
 def train_init(model: VAE, train_conf: TrainConf):
@@ -68,11 +89,12 @@ def main():
     
     model = conf.model
     data = conf.dataloader
+    val_data = conf.val_dataloader
     train_conf = conf.train
     
     train_init(model, train_conf)
     
-    train(model, data, train_conf)
+    train(model, data, val_data, train_conf)
 
 
 if __name__ == '__main__':
