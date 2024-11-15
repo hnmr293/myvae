@@ -19,6 +19,7 @@ class TrainConfParams:
     save_every_n_epochs: int = 1
     loss: list[dict]|None = None
     hf_repo_id: str|None = None
+    matmul_precision: str = 'highest'
 
 
 @dataclass #(frozen=True)  # cannot inferit frozon dataclass from a non-frozen one

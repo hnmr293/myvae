@@ -29,6 +29,7 @@ def train(
     optimizer = train_conf.optimizer
     scheduler = train_conf.scheduler
     
+    torch.set_float32_matmul_precision(train_conf.matmul_precision)
     model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
     
     log_freq = train_conf.log_freq
