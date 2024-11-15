@@ -1,4 +1,5 @@
-from PIL import Image
+from pathlib import Path
+
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
@@ -17,6 +18,7 @@ def train(
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
+    hparam_config: dict,  # for model saving
 ):
     global_steps = 0
     
@@ -27,6 +29,7 @@ def train(
     model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
     
     log_freq = train_conf.log_freq
+    save_epochs = train_conf.save_every_n_epochs
     
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
@@ -73,7 +76,7 @@ def train(
             # compute validation loss
             acc.log({
                 'val/loss': val_loss.item()
-            })
+            }, step=global_steps-1)
             
             # create images
             input_images = []
@@ -91,15 +94,91 @@ def train(
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],
             }, step=global_steps-1)
+            
+            if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
+                save_model(
+                    f'{epoch:05d}_{global_steps-1:08d}.ckpt',
+                    hparam_config,
+                    acc.unwrap_model(model),
+                    acc.unwrap_model(optimizer),
+                    acc.unwrap_model(scheduler),
+                )
 
         acc.wait_for_everyone()
 
-def train_init(model: VAE, train_conf: TrainConf):
+
+def save_model(
+    path: str|Path,
+    config: dict,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+):
+    model_sd = model.state_dict()
+    opt_sd = optimizer.state_dict()
+    sched_sd = scheduler.state_dict()
+    
+    sd = {
+        'state_dict': model_sd,
+        'optimizer': opt_sd,
+        'scheduler': sched_sd,
+        'config': config,
+    }
+    
+    torch.save(sd, path)
+
+
+def load_model(path: str|Path, init):
+    sd = torch.load(path, weights_only=True, map_location='cpu')
+    
+    metadata = sd.pop('config')
+    
+    from myvae.train import parse_dict
+    
+    conf = parse_dict(metadata)
+    
+    init.model.load_state_dict(sd['model'])
+    init.optimizer.load_state_dict(sd['optimizer'])
+    init.scheduler.load_state_dict(sd['scheduler'])
+    
+    #run_train(conf, metadata)
+    return conf, metadata
+
+
+def run_train(init, conf_dict):
+    model = init.model
+    data = init.dataloader
+    val_data = init.val_dataloader
+    train_conf = init.train
+    
+    assert isinstance(model, VAE)
+    assert isinstance(data, DataLoader)
+    assert isinstance(val_data, DataLoader)
+    assert isinstance(train_conf, TrainConf)
+    
+    if train_conf.pretrained_weight is not None:
+        load_model(train_conf.pretrained_weight, init)
+    
     model.train()
     model.requires_grad_(True)
     
     if train_conf.use_gradient_checkpointing:
         model.apply_gradient_checkpointing()
+
+    acc = Accelerator(
+        log_with='wandb',
+        gradient_accumulation_steps=train_conf.grad_acc_steps,
+    )
+    
+    acc.init_trackers(
+        project_name=init.project,
+        config=conf_dict,
+    )
+    
+    try:
+        train(acc, model, data, val_data, train_conf, conf_dict)
+    finally:
+        acc.end_training()
 
 
 def main():
@@ -110,31 +189,11 @@ def main():
     
     # for logger
     with open(conf_path) as io:
-        conf_yaml = yaml.load(io, Loader=yaml.SafeLoader)
+        conf_yaml = yaml.safe_load(io)
     
     conf = parse_config(conf_path)
     
-    model = conf.model
-    data = conf.dataloader
-    val_data = conf.val_dataloader
-    train_conf = conf.train
-    
-    train_init(model, train_conf)
-    
-    acc = Accelerator(
-        log_with='wandb',
-        gradient_accumulation_steps=train_conf.grad_acc_steps,
-    )
-    
-    acc.init_trackers(
-        project_name=conf.project,
-        config=conf_yaml,
-    )
-    
-    try:
-        train(acc, model, data, val_data, train_conf)
-    finally:
-        acc.end_training()
+    run_train(conf, conf_yaml)
 
 
 if __name__ == '__main__':

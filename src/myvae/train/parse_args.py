@@ -13,8 +13,10 @@ class TrainConfParams:
     grad_acc_steps: int = 1
     use_gradient_checkpointing: bool = False
     log_freq: int = 50
+    pretrained_weight: Path|None = None
     optimizer: Callable[[Iterable], torch.optim.Optimizer] #= field(default_factory=partial(torch.optim.AdamW, lr=1e-4))
     scheduler: Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler.LRScheduler] #= field(default_factory=partial(torch.optim.lr_scheduler.ConstantLR, factor=1.0, total_iters=0))
+    save_every_n_epochs: int = 1
 
 
 @dataclass #(frozen=True)  # cannot inferit frozon dataclass from a non-frozen one
@@ -40,6 +42,20 @@ def parse_config_path():
 
 
 def parse_config(path: Path):
+    p = create_parser()
+    cfg = p.parse_path(path)
+    init = init_args(p, cfg)
+    return init
+
+
+def parse_dict(obj: dict):
+    p = create_parser()
+    cfg = p.parse_object(obj)
+    init = init_args(p, cfg)
+    return init
+
+
+def create_parser():
     from jsonargparse import ArgumentParser
     p = ArgumentParser()
     p.add_dataclass_arguments(TrainConfParams, 'train')
@@ -48,8 +64,10 @@ def parse_config(path: Path):
     p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
     p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
     p.add_class_arguments(myvae.VAE, 'model')
-    
-    cfg = p.parse_path(path)
+    return p
+
+
+def init_args(p, cfg):
     init = p.instantiate_classes(cfg)
     
     dataloader_class = init.dataloader

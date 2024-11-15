@@ -27,6 +27,7 @@ train:
     grad_acc_steps: 8
     use_gradient_checkpointing: false
     log_freq: 16
+    save_every_n_epochs: 5
     optimizer:
         class_path: torch.optim.AdamW
         init_args:
