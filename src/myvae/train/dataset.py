@@ -1,6 +1,10 @@
+from pathlib import Path
 from typing import Sequence
+
+from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as tvt
 
 
 class DummyDataset(Dataset):
@@ -22,3 +26,25 @@ class DummyDataset(Dataset):
     
     def __getitem__(self, index: int):
         return torch.randn(self.shape, generator=self.rng, dtype=self.dtype)
+
+
+class WebpDataset(Dataset):
+    def __init__(
+        self,
+        data_dir: Path,
+    ):
+        super().__init__()
+        import glob
+        self.data_dir = Path(data_dir)
+        self.data = glob.glob(str(self.data_dir / '*.webp'))
+        self.transform = tvt.Compose([
+            tvt.ToTensor(),
+            tvt.Normalize([0.5], [0.5])
+        ])
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        data = self.data[index]
+        return self.transform(Image.open(data).convert('RGB'))
