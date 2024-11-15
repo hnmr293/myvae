@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
@@ -11,6 +12,7 @@ import wandb
 from myvae import VAE, VAEOutput
 from myvae.train import TrainConf
 import myvae.train.loss as losses
+from myvae.train.metrics import psnr, ssim
 
 
 def train(
@@ -66,51 +68,68 @@ def train(
         # validation
         val_results: list[VAEOutput] = []
         val_losses: list[torch.Tensor] = []
-        with torch.inference_mode(), acc.autocast():
+        with torch.inference_mode():
+            # for torch.compile
+            torch.compiler.cudagraph_mark_step_begin()
+            
             for batch in val_data:
                 x = batch
-                y: VAEOutput = model(x)
-                loss = loss_fn(y, x)
+                with acc.autocast():
+                    y: VAEOutput = model(x)
+                    loss = loss_fn(y, x)
                 val_results.append(y)
                 val_losses.append(loss)
         
-        if acc.is_main_process:
-            val_results = gather_object(val_results)
-            val_loss = torch.mean(torch.cat([loss.reshape(-1) for loss in gather_object(val_losses)], dim=0))
-            
-            # compute validation loss
-            acc.log({
-                'val/loss': val_loss.item()
-            }, step=global_steps-1)
-            
-            # create images
-            input_images = []
-            generated_images = []
-            for val_result in val_results:
-                inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
-                input_images.extend(inp_image)
-                gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
-                generated_images.extend(gen_image)
-            nrow = (len(input_images) ** 0.5).__ceil__()
-            image_left = make_grid(input_images, nrow=nrow)
-            image_right = make_grid(generated_images, nrow=nrow)
-            image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
-            
-            acc.get_tracker('wandb').log({
-                'val/image': [wandb.Image(image)],
-            }, step=global_steps-1)
-            
-            if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
-                name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
-                dir = acc.get_tracker('wandb').run.id
-                save_model(
-                    f'{dir}/{name}',
-                    hparam_config,
-                    acc.unwrap_model(model),
-                    acc.unwrap_model(optimizer),
-                    acc.unwrap_model(scheduler),
-                    train_conf.hf_repo_id,
-                )
+            if acc.is_main_process:
+                val_results = gather_object(val_results)
+                val_loss = torch.mean(torch.cat([loss.reshape(-1) for loss in gather_object(val_losses)], dim=0))
+                
+                # compute validation loss
+                acc.log({
+                    'val/loss': val_loss.item()
+                }, step=global_steps-1)
+                
+                # create images
+                input_images = []
+                generated_images = []
+                for val_result in val_results:
+                    inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
+                    input_images.extend(inp_image)
+                    gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
+                    generated_images.extend(gen_image)
+                input_images = torch.stack(input_images)
+                generated_images = torch.stack(generated_images)
+                
+                nrow = (len(input_images) ** 0.5).__ceil__()
+                image_left = make_grid(input_images, nrow=nrow)
+                image_right = make_grid(generated_images, nrow=nrow)
+                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+                
+                acc.get_tracker('wandb').log({
+                    'val/image': [wandb.Image(image)],
+                }, step=global_steps-1)
+                
+                # compute metrics
+                val_psnr = psnr(input_images, generated_images)
+                val_ssim = ssim(tvf.rgb_to_grayscale(input_images), tvf.rgb_to_grayscale(generated_images), reduction='none')
+                val_ssim_hist = np.histogram(val_ssim.reshape(-1).cpu().float(), bins=256, range=(-1, 1), density=True)
+                acc.get_tracker('wandb').log({
+                    'val/psnr': torch.mean(val_psnr).item(),
+                    'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
+                })
+                
+                
+                if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
+                    name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
+                    dir = acc.get_tracker('wandb').run.id
+                    save_model(
+                        f'{dir}/{name}',
+                        hparam_config,
+                        acc.unwrap_model(model),
+                        acc.unwrap_model(optimizer),
+                        acc.unwrap_model(scheduler),
+                        train_conf.hf_repo_id,
+                    )
 
         acc.wait_for_everyone()
 
