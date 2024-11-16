@@ -51,3 +51,35 @@ class WebpDataset(Dataset):
     def __getitem__(self, index):
         data = self.data[index]
         return self.transform(Image.open(data).convert('RGB'))
+
+
+class ImageDataset(Dataset):
+    def __init__(
+        self,
+        data_dir: Path,
+        limit: int|None = None,
+    ):
+        super().__init__()
+        import glob
+        self.data_dir = Path(data_dir)
+        
+        files = glob.glob(str(self.data_dir / '*.*'))
+        self.data = [file for file in files if file.endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+        
+        if len(self.data) == 0:
+            raise RuntimeError(f'empty data: self.data_dir')
+        
+        if 0 < (limit or 0):
+            self.data = self.data[:limit]
+        
+        self.transform = tvt.Compose([
+            tvt.ToTensor(),
+            tvt.Normalize([0.5], [0.5])
+        ])
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        data = self.data[index]
+        return self.transform(Image.open(data).convert('RGB'))

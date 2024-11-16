@@ -1,12 +1,12 @@
 project: 'vae-test'
 
 dataset:
-    class_path: myvae.train.dataset.WebpDataset
+    class_path: myvae.train.dataset.ImageDataset
     init_args:
         data_dir: 'data/256x256/train'
 
 val_dataset:
-    class_path: myvae.train.dataset.WebpDataset
+    class_path: myvae.train.dataset.ImageDataset
     init_args:
         data_dir: 'data/256x256/val'
 
