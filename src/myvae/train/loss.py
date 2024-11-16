@@ -7,7 +7,7 @@ import torch.nn.functional as tf
 from myvae import VAEOutput, EncoderOutput
 
 
-LossFn: TypeAlias = Callable[[VAEOutput, Tensor], Tensor]
+LossFn: TypeAlias = Callable[[VAEOutput], Tensor]
 
 
 def get_loss_fn(name: str) -> 'Type[Loss]':
@@ -37,7 +37,7 @@ class Loss:
     
     name = '_base'
     
-    def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
+    def __call__(self, out: VAEOutput) -> Tensor:
         raise NotImplementedError()
 
 
@@ -52,7 +52,7 @@ class Compose(Loss):
         
         self.loss_fns.append((loss_fn, weight))
     
-    def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
+    def __call__(self, out: VAEOutput) -> Tensor:
         if len(self.loss_fns) == 0:
             loss_fns = [(MSELoss(), 1.0)]
         else:
@@ -60,7 +60,7 @@ class Compose(Loss):
         
         loss = None
         for loss_fn, weight in loss_fns:
-            L = weight * loss_fn(pred, target)
+            L = weight * loss_fn(out)
             if loss is None:
                 loss = L
             else:
@@ -71,18 +71,18 @@ class Compose(Loss):
 
 class L1Loss(Loss):
     name = 'l1'
-    def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
-        return tf.l1_loss(pred, target)
+    def __call__(self, out: VAEOutput) -> Tensor:
+        return tf.l1_loss(out.decoder_output.value, out.input)
 
 
 class MSELoss(Loss):
     name = 'mse'
-    def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
-        return tf.mse_loss(pred.decoder_output.value, target)
+    def __call__(self, out: VAEOutput) -> Tensor:
+        return tf.mse_loss(out.decoder_output.value, out.input)
 
 
 class KLDLoss(Loss):
     name = 'kld'
-    def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
-        return kld(pred.encoder_output)
+    def __call__(self, out: VAEOutput) -> Tensor:
+        return kld(out.encoder_output)
 

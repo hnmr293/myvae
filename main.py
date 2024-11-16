@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import torch
@@ -49,7 +50,7 @@ def train(
                 with acc.autocast(), acc.accumulate(model):
                     x = batch
                     y: VAEOutput = model(x)
-                    loss = loss_fn(y, x)
+                    loss = loss_fn(y)
                     acc.backward(loss)
                     optimizer.step()
                     scheduler.step()
@@ -68,7 +69,7 @@ def train(
         
         # validation
         val_results: list[VAEOutput] = []
-        val_losses: list[torch.Tensor] = []
+        
         with torch.inference_mode():
             # for torch.compile
             torch.compiler.cudagraph_mark_step_begin()
@@ -77,17 +78,19 @@ def train(
                 x = batch
                 with acc.autocast():
                     y: VAEOutput = model(x)
-                    loss = loss_fn(y, x)
                 val_results.append(y)
-                val_losses.append(loss)
         
             if acc.is_main_process:
                 val_results = gather_object(val_results)
-                val_loss = torch.mean(torch.cat([loss.reshape(-1) for loss in gather_object(val_losses)], dim=0))
+                
+                def gather(fn: Callable[[VAEOutput], torch.Tensor]):
+                    return torch.stack([fn(out) for out in val_result])
+                
+                val_loss = torch.mean(gather(lambda x: loss_fn(x)))
                 
                 # compute validation loss
                 acc.log({
-                    'val/loss': val_loss.item()
+                    'val/loss': val_loss.item(),
                 }, step=global_steps-1)
                 
                 # create images
