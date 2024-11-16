@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 import torch.nn.functional as tf
 
-from myvae import VAEOutput
+from myvae import VAEOutput, EncoderOutput
 
 
 LossFn: TypeAlias = Callable[[VAEOutput, Tensor], Tensor]
@@ -23,6 +23,13 @@ def get_loss_fn(name: str) -> 'Type[Loss]':
             return klass
     
     raise RuntimeError(f'unknown loss type: {name}')
+
+
+def kld(z: EncoderOutput) -> Tensor:
+    mu = z.mean
+    logvar = z.logvar
+    kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return kld
 
 
 class Loss:
@@ -77,7 +84,5 @@ class MSELoss(Loss):
 class KLDLoss(Loss):
     name = 'kld'
     def __call__(self, pred: VAEOutput, target: Tensor) -> Tensor:
-        mu = pred.encoder_output.mean
-        logvar = pred.encoder_output.logvar
-        kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return kld
+        return kld(pred.encoder_output)
+
