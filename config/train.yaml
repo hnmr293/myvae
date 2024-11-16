@@ -30,9 +30,9 @@ train:
     save_every_n_epochs: 10
     loss:
         - type: mse
-          weight: 0.5
-        - type: kld
-          weight: 0.5
+          weight: 1.0
+        #- type: kld
+        #  weight: 0.001
     hf_repo_id: 'hnmr293/vae-test'
     optimizer:
         class_path: torch.optim.AdamW
