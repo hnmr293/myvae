@@ -84,10 +84,10 @@ def train(
                 val_results = gather_object(val_results)
                 
                 def gather(fn: Callable[[VAEOutput], torch.Tensor]):
-                    return torch.stack([fn(out) for out in val_result])
+                    return torch.stack([fn(out) for out in val_results])
                 
                 val_loss = torch.mean(gather(lambda x: loss_fn(x)))
-                val_kld_loss = torch.mean(gather(lambda x: losses.kld(x)))
+                val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
                 val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))
                 val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar)).exp()
                 
