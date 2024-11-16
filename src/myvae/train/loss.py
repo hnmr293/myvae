@@ -86,3 +86,11 @@ class KLDLoss(Loss):
     def __call__(self, out: VAEOutput) -> Tensor:
         return kld(out.encoder_output)
 
+
+class BCELoss(Loss):
+    name = 'bce'
+    def __call__(self, out: VAEOutput) -> Tensor:
+        # VAE の出力が -1..1 だとして変換する
+        pred = (out.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
+        target = (out.input * 0.5 + 0.5).clamp(0, 1)
+        tf.binary_cross_entropy(pred, target)
