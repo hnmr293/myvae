@@ -43,28 +43,40 @@ class Loss:
 
 class Compose(Loss):
     def __init__(self):
-        self.loss_fns: list[tuple[LossFn, float]] = []
+        self.loss_fns: list[tuple[LossFn, float, int]] = []
+        self.steps = 0
     
-    def add(self, loss_fn: LossFn|str, weight: float = 1.0):
+    def step(self):
+        self.steps += 1
+    
+    def add(self, loss_fn: LossFn|str, weight: float = 1.0, start_step: int = 0):
         if isinstance(loss_fn, str):
             klass = get_loss_fn(loss_fn)
             loss_fn = klass()
         
-        self.loss_fns.append((loss_fn, weight))
+        self.loss_fns.append((loss_fn, weight, start_step))
     
-    def __call__(self, out: VAEOutput) -> Tensor:
+    def __call__(self, out: VAEOutput, current_step: int|None = None) -> Tensor:
         if len(self.loss_fns) == 0:
-            loss_fns = [(MSELoss(), 1.0)]
+            loss_fns = [(MSELoss(), 1.0, 0)]
         else:
             loss_fns = self.loss_fns
         
+        if current_step is None:
+            current_step = self.steps
+        
         loss = None
-        for loss_fn, weight in loss_fns:
+        for loss_fn, weight, start_step in loss_fns:
+            if current_step < start_step:
+                continue
+            
             L = weight * loss_fn(out)
             if loss is None:
                 loss = L
             else:
                 loss = loss + L
+        
+        assert loss is not None
         
         return loss
 

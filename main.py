@@ -40,7 +40,8 @@ def train(
     loss_fn = losses.Compose()
     for loss_dict in (train_conf.loss or []):
         loss_name, loss_weight = loss_dict['type'], loss_dict['weight']
-        loss_fn.add(loss_name, loss_weight)
+        loss_start_step = loss_dict.get('start_step', 0)
+        loss_fn.add(loss_name, loss_weight, loss_start_step)
     
     
     for epoch in range(train_conf.n_epochs):
@@ -55,6 +56,7 @@ def train(
                     acc.backward(loss)
                     optimizer.step()
                     scheduler.step()
+                    loss_fn.step()
                     optimizer.zero_grad()
                 
                 pbar.set_postfix(loss=loss.item())
@@ -87,7 +89,7 @@ def train(
                 def gather(fn: Callable[[VAEOutput], torch.Tensor]):
                     return torch.stack([fn(out) for out in val_results])
                 
-                val_loss = torch.mean(gather(lambda x: loss_fn(x)))
+                val_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps-1)))
                 val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
                 val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
                 val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))

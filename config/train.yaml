@@ -31,8 +31,9 @@ train:
     loss:
         - type: mse
           weight: 1.0
-        #- type: kld
-        #  weight: 0.001
+        - type: kld
+          weight: 0.01
+          start_step: 2340  # 1epoch
     hf_repo_id: 'hnmr293/vae-test'
     optimizer:
         class_path: torch.optim.AdamW
