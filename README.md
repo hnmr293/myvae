@@ -16,7 +16,15 @@ $ . .venv/bin/activate
 
 ## Train
 
-`config/train.toml` を編集して `accelerate launch` で `main.py` を実行します。
+事前に `wandb` にログインしておきます。自動で投稿したくない場合はオフラインモードにしておきます。
+
+```bash
+$ wandb login
+# 任意
+$ wandb offline
+```
+
+`config/train.toml` を編集し、 `accelerate launch` で `main.py` を実行します。
 
 ```bash
 # `uv` を使う場合
