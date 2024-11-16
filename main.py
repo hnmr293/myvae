@@ -3,6 +3,7 @@ from typing import Callable
 
 import numpy as np
 import torch
+import torch.nn.functional as tf
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
 from torchvision.utils import make_grid
@@ -87,6 +88,7 @@ def train(
                     return torch.stack([fn(out) for out in val_results])
                 
                 val_loss = torch.mean(gather(lambda x: loss_fn(x)))
+                val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
                 val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
                 val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))
                 val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar)).exp()
@@ -94,6 +96,7 @@ def train(
                 # compute validation loss
                 acc.log({
                     'val/loss': val_loss.item(),
+                    'val/mse': val_loss_mse.item(),
                     'val/KLD': val_kld_loss.item(),
                     'val/z_mean': val_z_mean.item(),
                     'val/z_var': val_z_var.item(),
