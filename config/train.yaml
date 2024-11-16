@@ -13,7 +13,7 @@ val_dataset:
 dataloader:
     class_path: torch.utils.data.DataLoader
     init_args:
-        shuffle: false
+        shuffle: true
         drop_last: true
 
 model:
