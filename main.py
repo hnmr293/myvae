@@ -130,6 +130,8 @@ def train(
     
     
     def save_model_hparams(epoch: int, steps: int):
+        if not acc.is_main_process:
+            return
         dir = acc.get_tracker('wandb').run.id
         name = f'{epoch:05d}_{steps:08d}.ckpt'
         path = f'{dir}/{name}'
