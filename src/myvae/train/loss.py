@@ -107,3 +107,20 @@ class BCELoss(Loss):
         target = (out.input * 0.5 + 0.5).clamp(0, 1)
         with torch.autocast(pred.device.type, enabled=False):
             return tf.binary_cross_entropy(pred.float(), target.float())
+
+
+class GramMatrixL1Loss(Loss):
+    name = 'gm'
+    def __init__(self, normalize: bool = False):
+        self.normalize = normalize
+    
+    def __call__(self, out: VAEOutput):
+        vec_target = out.input.flatten(2)
+        vec_pred = out.decoder_output.value.flatten(2)
+        gm_target = vec_target @ vec_target.mT
+        gm_pred = vec_pred @ vec_pred.mT
+        loss = tf.l1_loss(gm_target, gm_pred)
+        if self.normalize:
+            n = vec_target.size(-1)
+            loss = loss / (n ** 0.5)
+        return loss
