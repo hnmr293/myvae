@@ -239,6 +239,36 @@ def run_train(init, conf_dict):
         config=conf_dict,
     )
     
+    # エンコーダの縮小率
+    r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)
+    
+    # 画像サイズが異なるときの対応
+    def collate_fn(data: list[torch.Tensor]):
+        assert isinstance(data, (tuple, list))
+        assert all(isinstance(t, torch.Tensor) for t in data)
+        assert all(t.ndim == 3 for t in data)
+        # t := (C, H, W)
+        assert all(t.size(0) == 3 for t in data)
+        
+        # 画質の観点から拡縮は行わず、バッチ内の一番小さい画像サイズに合わせる
+        # 大きな画像は縮小するのではなく、一部を切り出す
+        width = min(t.size(-1) for t in data)
+        height = min(t.size(-2) for t in data)
+        
+        # エンコーダの縮小率に合わせる
+        width = width & ~(r - 1)
+        height = height & ~(r - 1)
+        
+        result = []
+        for t in data:
+            t = t[:, :height, :width]
+            result.append(t)
+        
+        return torch.stack(result, dim=0)
+    
+    data.collate_fn = collate_fn
+    val_data.collate_fn = collate_fn
+    
     try:
         train(acc, model, data, val_data, train_conf, conf_dict)
     finally:
