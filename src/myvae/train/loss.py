@@ -111,7 +111,7 @@ class BCELoss(Loss):
 
 class GramMatrixL1Loss(Loss):
     name = 'gm'
-    def __init__(self, normalize: bool = False):
+    def __init__(self, normalize: bool = True):
         self.normalize = normalize
     
     def __call__(self, out: VAEOutput):
