@@ -15,3 +15,5 @@ wheels/
 /data
 wandb
 *.ckpt
+/config
+-/config/train.yaml
