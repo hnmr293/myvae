@@ -228,7 +228,7 @@ def validate(
             
             val_losses = [
                 losses.get_loss_fn(loss_name)()
-                for loss_name in train_conf.val_loss
+                for loss_name in (train_conf.val_loss or [])
             ]
             
             # compute validation loss
