@@ -145,6 +145,8 @@ def train(
         
         saver.save(path, sd)
     
+    acc.wait_for_everyone()
+    
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
             pbar.set_description(f'[Epoch {epoch}]')
