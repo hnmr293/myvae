@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Callable
+from concurrent.futures import Future
+from typing import Callable, Any
 
 import numpy as np
 import torch
@@ -17,13 +18,94 @@ import myvae.train.loss as losses
 from myvae.train.metrics import psnr, ssim
 
 
+class ModelSaver:
+    def __init__(self, additional_params: dict[str, Any]):
+        self.additional_params = additional_params
+        self.last_saved_path: Path|None = None
+    
+    def save(self, path: str|Path, obj: dict[str, Any]) -> Future:
+        path = Path(path)
+        
+        res = None
+        if self.last_saved_path != path:
+            res = self._save(path, obj | self.additional_params)
+            self.last_saved_path = path
+        
+        if not isinstance(res, Future):
+            f = Future()
+            f.set_result(res)
+            res = f
+        
+        return res
+    
+    def _save(self, path: Path, obj: dict[str, Any]):
+        raise NotImplementedError()
+    
+    def close(self):
+        pass
+
+
+class ModelSaverLocal(ModelSaver):
+    def _save(self, path: Path, obj: dict[str, Any]):
+        import os
+        dir = path.parent
+        os.makedirs(dir, exist_ok=True)
+        torch.save(obj, path)
+
+
+class ModelSaverHf(ModelSaver):
+    def __init__(self, hf_repo_id: str, use_async: bool, additional_params: dict[str, Any]):
+        super().__init__(additional_params)
+        
+        import os
+        os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '1'
+        
+        from huggingface_hub import HfApi
+        self.api = HfApi()
+        self.repo_id = hf_repo_id
+        self.use_async = use_async
+        self.last_future: Future|None = None
+    
+    def _save(self, path: Path, obj: dict[str, Any]):
+        from io import BytesIO
+        io = BytesIO()
+        torch.save(obj, io)
+        io.seek(0)
+        
+        upload_file = self.api.upload_file
+        if self.use_async:
+            from functools import partial
+            upload_file = partial(self.api.run_as_future, upload_file)
+        
+        if self.last_future is not None:
+            self.close()
+        
+        res = upload_file(
+            path_or_fileobj=io,
+            path_in_repo=str(path),
+            repo_id=self.repo_id,
+        )
+        
+        if isinstance(res, Future):
+            self.last_future = res
+    
+    def close(self):
+        if self.last_future is not None:
+            # 前のアップロードが未完了だったら完了するまで待つ
+            try:
+                self.last_future.result()
+            except Exception as e:
+                import sys
+                print(str(e), file=sys.stderr)
+
+
 def train(
     acc: Accelerator,
     model: VAE,
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
-    hparam_config: dict,  # for model saving
+    saver: ModelSaver,
 ):
     global_steps = 0
     
@@ -47,25 +129,19 @@ def train(
         loss_fn.add(loss_name, loss_weight, loss_start_step)
     
     
-    last_saved = None
-    
     def save_model_hparams(epoch: int, steps: int):
-        nonlocal last_saved
-        
-        name = f'{epoch:05d}_{steps:08d}.ckpt'
         dir = acc.get_tracker('wandb').run.id
+        name = f'{epoch:05d}_{steps:08d}.ckpt'
         path = f'{dir}/{name}'
-        if last_saved == path:
-            return
-        last_saved = path
-        save_model(
-            path,
-            hparam_config,
-            acc.unwrap_model(model),
-            acc.unwrap_model(optimizer),
-            acc.unwrap_model(scheduler),
-            train_conf.hf_repo_id,
-        )
+        
+        sd = {
+            # torch.compile 対応
+            'state_dict': {k.replace('_orig_mod.', ''): v for k, v in acc.unwrap_model(model).state_dict().items()},
+            'optimizer': acc.unwrap_model(optimizer).state_dict(),
+            'scheduler': acc.unwrap_model(scheduler).state_dict(),
+        }
+        
+        saver.save(path, sd)
     
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
@@ -192,45 +268,6 @@ def validate(
     model.train(model_is_training)
 
 
-def save_model(
-    path: str|Path,
-    config: dict,
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LRScheduler,
-    hf_repo_id: str|None,
-):
-    model_sd = model.state_dict()
-    opt_sd = optimizer.state_dict()
-    sched_sd = scheduler.state_dict()
-    
-    sd = {
-        'state_dict': model_sd,
-        'optimizer': opt_sd,
-        'scheduler': sched_sd,
-        'config': config,
-    }
-    
-    if hf_repo_id is None:
-        import os
-        dir = Path(path).parent
-        os.makedirs(dir, exist_ok=True)
-        torch.save(sd, path)
-    else:
-        from io import BytesIO
-        from huggingface_hub import HfApi
-        io = BytesIO()
-        torch.save(sd, io)
-        io.seek(0)
-        
-        api = HfApi()
-        api.upload_file(
-            path_or_fileobj=io,
-            path_in_repo=path,
-            repo_id=hf_repo_id,
-        )
-
-
 def load_model(path: str|Path, init):
     sd = torch.load(path, weights_only=True, map_location='cpu')
     
@@ -312,10 +349,23 @@ def run_train(init, conf_dict):
     data.collate_fn = collate_fn
     val_data.collate_fn = collate_fn
     
+    # モデルの保存先
+    if train_conf.hf_repo_id is not None:
+        saver = ModelSaverHf(
+            train_conf.hf_repo_id,
+            train_conf.model_save_async,
+            additional_params={'config': conf_dict}
+        )
+    else:
+        saver = ModelSaverLocal(
+            additional_params={'config': conf_dict}
+        )
+    
     try:
-        train(acc, model, data, val_data, train_conf, conf_dict)
+        train(acc, model, data, val_data, train_conf, saver)
     finally:
         acc.end_training()
+        saver.close()
 
 
 def main():

@@ -32,6 +32,9 @@ class TrainConfParams:
     scheduler: Callable[[torch.optim.Optimizer], torch.optim.lr_scheduler.LRScheduler] #= field(default_factory=partial(torch.optim.lr_scheduler.ConstantLR, factor=1.0, total_iters=0))
     """学習率スケジューラの設定"""
     
+    model_save_async: bool = False
+    """モデルのアップロードを非同期で行うか"""
+    
     save_every_n_epochs: int = 1
     """モデルの保存頻度（エポック単位）"""
     
