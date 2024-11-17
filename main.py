@@ -35,6 +35,7 @@ def train(
     model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
     
     log_freq = train_conf.log_freq
+    save_freq = train_conf.save_every_n_steps
     save_epochs = train_conf.save_every_n_epochs
     
     loss_fn = losses.Compose()
@@ -43,6 +44,24 @@ def train(
         loss_start_step = loss_dict.get('start_step', 0)
         loss_fn.add(loss_name, loss_weight, loss_start_step)
     
+    
+    last_saved = None
+    
+    def save_model_hparams(epoch: int, steps: int):
+        name = f'{epoch:05d}_{steps:08d}.ckpt'
+        dir = acc.get_tracker('wandb').run.id
+        path = f'{dir}/{name}'
+        if last_saved == path:
+            return
+        last_saved = path
+        save_model(
+            path,
+            hparam_config,
+            acc.unwrap_model(model),
+            acc.unwrap_model(optimizer),
+            acc.unwrap_model(scheduler),
+            train_conf.hf_repo_id,
+        )
     
     for epoch in range(train_conf.n_epochs):
         with tqdm(data) as pbar:
@@ -66,6 +85,9 @@ def train(
                         'train/loss': loss.item(),
                     }, step=global_steps)
                 
+                if 0 < save_freq and (global_steps + 1) % save_freq == 0:
+                    save_model_hparams(epoch, global_steps)
+                
                 global_steps += 1
             
         # epoch end
@@ -75,16 +97,7 @@ def train(
         
         # saving
         if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
-            name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
-            dir = acc.get_tracker('wandb').run.id
-            save_model(
-                f'{dir}/{name}',
-                hparam_config,
-                acc.unwrap_model(model),
-                acc.unwrap_model(optimizer),
-                acc.unwrap_model(scheduler),
-                train_conf.hf_repo_id,
-            )
+            save_model_hparams(epoch, global_steps-1)
         
         acc.wait_for_everyone()
 

@@ -33,7 +33,10 @@ class TrainConfParams:
     """学習率スケジューラの設定"""
     
     save_every_n_epochs: int = 1
-    """モデルの保存頻度"""
+    """モデルの保存頻度（エポック単位）"""
+    
+    save_every_n_steps: int = 0
+    """モデルの保存頻度（ステップ単位）"""
     
     hf_repo_id: str|None = None
     """モデルの保存先　未指定の場合ローカルに保存される"""
