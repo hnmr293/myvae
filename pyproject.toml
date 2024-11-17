@@ -12,6 +12,7 @@ dependencies = [
     "einops>=0.8.0",
     "huggingface-hub[cli]>=0.26.2",
     "jsonargparse>=4.34.0",
+    "natsort>=8.4.0",
     "pillow>=11.0.0",
     "torch>=2.5.1",
     "torchvision>=0.20.1",
