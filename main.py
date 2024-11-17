@@ -361,6 +361,13 @@ def run_train(init, conf_dict):
             additional_params={'config': conf_dict}
         )
     
+    if acc.is_main_process:
+        import pprint
+        print('=' * 80)
+        print('  Training Setting')
+        print('=' * 80)
+        pprint.pprint(conf_dict)
+    
     try:
         train(acc, model, data, val_data, train_conf, saver)
     finally:
