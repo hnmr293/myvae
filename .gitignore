@@ -10,6 +10,8 @@ wheels/
 .venv
 
 
+.cache
 .env
 /data
-/wandb
+wandb
+*.ckpt
