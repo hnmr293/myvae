@@ -55,6 +55,8 @@ class TrainConfParams:
     
     {type: str, [weight: float = 1.0], [start_step: int = 0]} の形式"""
     
+    val_loss: list[str]|None = None
+    
     matmul_precision: str = 'highest'
     """torch.set_float32_matmul_precision に渡す引数"""
 

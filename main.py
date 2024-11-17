@@ -166,7 +166,7 @@ def train(
                     }, step=global_steps)
                 
                 if 0 < val_freq and (global_steps + 1) % val_freq == 0:
-                    validate(acc, model, val_data, loss_fn, global_steps)
+                    validate(acc, model, val_data, loss_fn, global_steps, train_conf)
                 
                 if 0 < save_freq and (global_steps + 1) % save_freq == 0:
                     save_model_hparams(epoch, global_steps)
@@ -177,7 +177,7 @@ def train(
         
         # validation
         if 0 < val_epochs and (epoch + 1) % val_epochs == 0:
-            validate(acc, model, val_data, loss_fn, global_steps-1)
+            validate(acc, model, val_data, loss_fn, global_steps-1, train_conf)
         
         # saving
         if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
@@ -192,6 +192,7 @@ def validate(
     val_data: DataLoader,
     loss_fn: losses.Loss,
     global_steps: int,
+    train_conf: TrainConf,
 ):
     acc.wait_for_everyone()
     
@@ -221,19 +222,26 @@ def validate(
                 else:
                     return torch.stack([fn(out) for out in val_results])
             
-            val_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps)))
-            val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
-            val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
+            val_losses = [
+                losses.get_loss_fn(loss_name)()
+                for loss_name in train_conf.val_loss
+            ]
+            
+            # compute validation loss
+            val_total_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps)))
             val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean.reshape(-1), cat=True))
             val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar.reshape(-1), cat=True)).exp()
             
-            # compute validation loss
+            val_extra_losses = {
+                f'val/loss/{fn.name.upper()}': torch.mean(gather(lambda x: fn(x))).item()
+                for fn in val_losses
+            }
+            
             acc.log({
-                'val/loss': val_loss.item(),
-                'val/mse': val_loss_mse.item(),
-                'val/KLD': val_kld_loss.item(),
-                'val/z_mean': val_z_mean.item(),
-                'val/z_var': val_z_var.item(),
+                'val/z/mean': val_z_mean.item(),
+                'val/z/var': val_z_var.item(),
+                'val/loss/total': val_total_loss.item(),
+                **val_extra_losses,
             }, step=global_steps)
             
             # create images
