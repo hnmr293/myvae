@@ -115,12 +115,13 @@ class GramMatrixL1Loss(Loss):
         self.normalize = normalize
     
     def __call__(self, out: VAEOutput):
-        vec_target = out.input.flatten(2)
-        vec_pred = out.decoder_output.value.flatten(2)
-        gm_target = vec_target @ vec_target.mT
-        gm_pred = vec_pred @ vec_pred.mT
-        loss = tf.l1_loss(gm_target, gm_pred)
-        if self.normalize:
-            n = vec_target.size(-1)
-            loss = loss / (n ** 0.5)
+        vec_target = out.input.flatten(2).float()
+        vec_pred = out.decoder_output.value.flatten(2).float()
+        with torch.autocast(vec_target.device.type, enabled=False):
+            gm_target = vec_target @ vec_target.mT
+            gm_pred = vec_pred @ vec_pred.mT
+            loss = tf.l1_loss(gm_target, gm_pred)
+            if self.normalize:
+                n = vec_target.size(-1)
+                loss = loss / (n ** 0.5)
         return loss
