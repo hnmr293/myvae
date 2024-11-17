@@ -135,14 +135,17 @@ def validate(
         if acc.is_main_process:
             val_results = gather_object(val_results)
             
-            def gather(fn: Callable[[VAEOutput], torch.Tensor]):
-                return torch.stack([fn(out) for out in val_results])
+            def gather(fn: Callable[[VAEOutput], torch.Tensor], cat: bool = False):
+                if cat:
+                    return torch.cat([fn(out) for out in val_results])
+                else:
+                    return torch.stack([fn(out) for out in val_results])
             
             val_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps)))
             val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
             val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
-            val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))
-            val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar)).exp()
+            val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean.reshape(-1), cat=True))
+            val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar.reshape(-1), cat=True)).exp()
             
             # compute validation loss
             acc.log({
@@ -161,8 +164,12 @@ def validate(
                 input_images.extend(inp_image)
                 gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
                 generated_images.extend(gen_image)
-            input_images = torch.stack(input_images)
-            generated_images = torch.stack(generated_images)
+            
+            width = min(t.size(-1) for t in input_images)
+            height = min(t.size(-2) for t in input_images)
+            
+            input_images = torch.stack([t[:, :height, :width] for t in input_images])
+            generated_images = torch.stack([t[:, :height, :width] for t in generated_images])
             
             nrow = (len(input_images) ** 0.5).__ceil__()
             image_left = make_grid(input_images, nrow=nrow)
