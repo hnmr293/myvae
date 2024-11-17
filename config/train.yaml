@@ -16,6 +16,12 @@ dataloader:
         shuffle: true
         drop_last: true
 
+val_dataloader:
+    class_path: torch.utils.data.DataLoader
+    init_args:
+        shuffle: false
+        drop_last: true
+
 model:
     config:
         encoder: {}

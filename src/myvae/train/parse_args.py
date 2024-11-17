@@ -103,6 +103,7 @@ def create_parser():
     p.add_argument('--dataset', type=torch.utils.data.Dataset)
     p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
     p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
+    p.add_argument('--val_dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
     p.add_class_arguments(myvae.VAE, 'model')
     return p
 
@@ -110,9 +111,8 @@ def create_parser():
 def init_args(p, cfg):
     init = p.instantiate_classes(cfg)
     
-    dataloader_class = init.dataloader
-    init.dataloader = dataloader_class(init.dataset, init.train.batch_size)
-    init.val_dataloader = dataloader_class(init.val_dataset, 1)  # 何かあると怖いのでバリデーション時のバッチサイズは1にしておく
+    init.dataloader = init.dataloader(init.dataset, init.train.batch_size)
+    init.val_dataloader = init.val_dataloader(init.val_dataset, 1)  # 何かあると怖いのでバリデーション時のバッチサイズは1にしておく
     init.train.optimizer = init.train.optimizer(init.model.parameters())
     init.train.scheduler = init.train.scheduler(init.train.optimizer)
     
