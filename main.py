@@ -37,6 +37,8 @@ def train(
     log_freq = train_conf.log_freq
     save_freq = train_conf.save_every_n_steps
     save_epochs = train_conf.save_every_n_epochs
+    val_freq = train_conf.validate_every_n_steps
+    val_epochs = train_conf.validate_every_n_epochs
     
     loss_fn = losses.Compose()
     for loss_dict in (train_conf.loss or []):
@@ -85,6 +87,9 @@ def train(
                         'train/loss': loss.item(),
                     }, step=global_steps)
                 
+                if 0 < val_freq and (global_steps + 1) % val_freq == 0:
+                    validate(acc, model, val_data, loss_fn, global_steps)
+                
                 if 0 < save_freq and (global_steps + 1) % save_freq == 0:
                     save_model_hparams(epoch, global_steps)
                 
@@ -93,7 +98,8 @@ def train(
         # epoch end
         
         # validation
-        validate(acc, model, val_data, loss_fn, global_steps-1)
+        if 0 < val_epochs and (epoch + 1) % val_epochs == 0:
+            validate(acc, model, val_data, loss_fn, global_steps-1)
         
         # saving
         if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
