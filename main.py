@@ -193,6 +193,8 @@ def validate(
     loss_fn: losses.Loss,
     global_steps: int,
 ):
+    acc.wait_for_everyone()
+    
     val_results: list[VAEOutput] = []
     
     model_is_training = model.training
@@ -208,8 +210,10 @@ def validate(
                 y: VAEOutput = model(x)
             val_results.append(y)
     
+        val_results = gather_object(val_results)
+        
         if acc.is_main_process:
-            val_results = gather_object(val_results)
+            val_results = [out.to(device=acc.device) for out in val_results]
             
             def gather(fn: Callable[[VAEOutput], torch.Tensor], cat: bool = False):
                 if cat:
@@ -264,6 +268,8 @@ def validate(
                 'val/psnr': torch.mean(val_psnr).item(),
                 'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
             }, step=global_steps)
+    
+    acc.wait_for_everyone()
     
     model.train(model_is_training)
 
