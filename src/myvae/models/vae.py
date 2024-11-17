@@ -25,9 +25,18 @@ class EncoderOutput:
     
     def sample(self, rng: torch.Generator|None = None):
         a = self.mean
+        
         e = torch.randn(a.shape, generator=rng, dtype=a.dtype, device=a.device)
+        ## torch.randn_like は torch.Generator をとらない
+        ## torch.randn() を使うと torch.compile がこけることがある（環境による？）
+        ## torch.compile が呼べて Generator も使えるように empty_like().normal_() を使う
+        ## 参考：
+        ##   https://github.com/pytorch/pytorch/issues/27072
+        ##   https://github.com/pytorch/pytorch/pull/136780
+        #e = torch.empty_like(a).normal_(generator=rng)
+        
         z = a + self.std * e
-        # e ~ N(a,std^2)
+        # z ~ N(a,std^2)
         return z
     
     def clone(self):
