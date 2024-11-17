@@ -105,4 +105,4 @@ class BCELoss(Loss):
         # VAE の出力が -1..1 だとして変換する
         pred = (out.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
         target = (out.input * 0.5 + 0.5).clamp(0, 1)
-        tf.binary_cross_entropy(pred, target)
+        return tf.binary_cross_entropy(pred, target)
