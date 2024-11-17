@@ -202,8 +202,8 @@ def load_model(path: str|Path, init):
     sd_ = {k.replace('_orig_mod.', ''): v for k, v in sd_.items()}
     
     init.model.load_state_dict(sd_)
-    init.optimizer.load_state_dict(sd['optimizer'])
-    init.scheduler.load_state_dict(sd['scheduler'])
+    init.train.optimizer.load_state_dict(sd['optimizer'])
+    init.train.scheduler.load_state_dict(sd['scheduler'])
     
     #run_train(conf, metadata)
     return conf, metadata
