@@ -29,11 +29,23 @@ class EncoderOutput:
         z = a + self.std * e
         # e ~ N(a,std^2)
         return z
+    
+    def clone(self):
+        return EncoderOutput(self.mean.clone(), self.logvar.clone())
+    
+    def to(self, *args, **kwargs):
+        return EncoderOutput(self.mean.to(*args, **kwargs), self.logvar.to(*args, **kwargs))
 
 
 @dataclass
 class DecoderOutput:
     value: torch.Tensor
+    
+    def clone(self):
+        return DecoderOutput(self.value.clone())
+    
+    def to(self, *args, **kwargs):
+        return DecoderOutput(self.value.to(*args, **kwargs))
 
 
 @dataclass
@@ -41,6 +53,12 @@ class VAEOutput:
     input: torch.Tensor
     encoder_output: EncoderOutput
     decoder_output: DecoderOutput
+    
+    def clone(self):
+        return VAEOutput(self.input.clone(), self.encoder_output.clone(), self.decoder_output.clone())
+    
+    def to(self, *args, **kwargs):
+        return VAEOutput(self.input.to(*args, **kwargs), self.encoder_output.to(*args, **kwargs), self.decoder_output.to(*args, **kwargs))
 
 
 class VAE(nn.Module):
