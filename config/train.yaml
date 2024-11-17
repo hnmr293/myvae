@@ -46,7 +46,9 @@ train:
         - l1
         - mse
         - kld
+        - gm
     #hf_repo_id: 'ここにHFの repo id を入れるとモデルファイルを自動でアップロードする'
+    model_save_async: false
     optimizer:
         class_path: torch.optim.AdamW
         init_args:
