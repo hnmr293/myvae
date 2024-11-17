@@ -71,82 +71,92 @@ def train(
         # epoch end
         
         # validation
-        val_results: list[VAEOutput] = []
+        validate(acc, model, val_data, loss_fn, global_steps-1)
         
-        with torch.inference_mode():
-            # for torch.compile
-            torch.compiler.cudagraph_mark_step_begin()
-            
-            for batch in val_data:
-                x = batch
-                with acc.autocast():
-                    y: VAEOutput = model(x)
-                val_results.append(y)
+        # saving
+        if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
+            name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
+            dir = acc.get_tracker('wandb').run.id
+            save_model(
+                f'{dir}/{name}',
+                hparam_config,
+                acc.unwrap_model(model),
+                acc.unwrap_model(optimizer),
+                acc.unwrap_model(scheduler),
+                train_conf.hf_repo_id,
+            )
         
-            if acc.is_main_process:
-                val_results = gather_object(val_results)
-                
-                def gather(fn: Callable[[VAEOutput], torch.Tensor]):
-                    return torch.stack([fn(out) for out in val_results])
-                
-                val_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps-1)))
-                val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
-                val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
-                val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))
-                val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar)).exp()
-                
-                # compute validation loss
-                acc.log({
-                    'val/loss': val_loss.item(),
-                    'val/mse': val_loss_mse.item(),
-                    'val/KLD': val_kld_loss.item(),
-                    'val/z_mean': val_z_mean.item(),
-                    'val/z_var': val_z_var.item(),
-                }, step=global_steps-1)
-                
-                # create images
-                input_images = []
-                generated_images = []
-                for val_result in val_results:
-                    inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
-                    input_images.extend(inp_image)
-                    gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
-                    generated_images.extend(gen_image)
-                input_images = torch.stack(input_images)
-                generated_images = torch.stack(generated_images)
-                
-                nrow = (len(input_images) ** 0.5).__ceil__()
-                image_left = make_grid(input_images, nrow=nrow)
-                image_right = make_grid(generated_images, nrow=nrow)
-                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
-                
-                acc.get_tracker('wandb').log({
-                    'val/image': [wandb.Image(image)],
-                }, step=global_steps-1)
-                
-                # compute metrics
-                val_psnr = psnr(input_images, generated_images)
-                val_ssim = ssim(tvf.rgb_to_grayscale(input_images), tvf.rgb_to_grayscale(generated_images), reduction='none')
-                val_ssim_hist = np.histogram(val_ssim.reshape(-1).cpu().float(), bins=256, range=(-1, 1), density=True)
-                acc.get_tracker('wandb').log({
-                    'val/psnr': torch.mean(val_psnr).item(),
-                    'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
-                }, step=global_steps-1)
-                
-                
-                if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
-                    name = f'{epoch:05d}_{global_steps-1:08d}.ckpt'
-                    dir = acc.get_tracker('wandb').run.id
-                    save_model(
-                        f'{dir}/{name}',
-                        hparam_config,
-                        acc.unwrap_model(model),
-                        acc.unwrap_model(optimizer),
-                        acc.unwrap_model(scheduler),
-                        train_conf.hf_repo_id,
-                    )
-
         acc.wait_for_everyone()
+
+
+def validate(
+    acc: Accelerator,
+    model: VAE,
+    val_data: DataLoader,
+    loss_fn: losses.Loss,
+    global_steps: int,
+):
+    val_results: list[VAEOutput] = []
+    
+    with torch.inference_mode():
+        # for torch.compile
+        torch.compiler.cudagraph_mark_step_begin()
+        
+        for batch in val_data:
+            x = batch
+            with acc.autocast():
+                y: VAEOutput = model(x)
+            val_results.append(y)
+    
+        if acc.is_main_process:
+            val_results = gather_object(val_results)
+            
+            def gather(fn: Callable[[VAEOutput], torch.Tensor]):
+                return torch.stack([fn(out) for out in val_results])
+            
+            val_loss = torch.mean(gather(lambda x: loss_fn(x, current_step=global_steps)))
+            val_loss_mse = torch.mean(gather(lambda x: tf.mse_loss(x.decoder_output.value, x.input)))
+            val_kld_loss = torch.mean(gather(lambda x: losses.kld(x.encoder_output)))
+            val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean))
+            val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar)).exp()
+            
+            # compute validation loss
+            acc.log({
+                'val/loss': val_loss.item(),
+                'val/mse': val_loss_mse.item(),
+                'val/KLD': val_kld_loss.item(),
+                'val/z_mean': val_z_mean.item(),
+                'val/z_var': val_z_var.item(),
+            }, step=global_steps)
+            
+            # create images
+            input_images = []
+            generated_images = []
+            for val_result in val_results:
+                inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
+                input_images.extend(inp_image)
+                gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
+                generated_images.extend(gen_image)
+            input_images = torch.stack(input_images)
+            generated_images = torch.stack(generated_images)
+            
+            nrow = (len(input_images) ** 0.5).__ceil__()
+            image_left = make_grid(input_images, nrow=nrow)
+            image_right = make_grid(generated_images, nrow=nrow)
+            image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+            
+            acc.get_tracker('wandb').log({
+                'val/image': [wandb.Image(image)],
+            }, step=global_steps)
+            
+            # compute metrics
+            val_psnr = psnr(input_images, generated_images)
+            val_ssim = ssim(tvf.rgb_to_grayscale(input_images), tvf.rgb_to_grayscale(generated_images), reduction='none')
+            val_ssim_hist = np.histogram(val_ssim.reshape(-1).cpu().float(), bins=256, range=(-1, 1), density=True)
+            acc.get_tracker('wandb').log({
+                'val/psnr': torch.mean(val_psnr).item(),
+                'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
+            }, step=global_steps)
 
 
 def save_model(
