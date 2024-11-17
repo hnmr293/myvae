@@ -67,7 +67,7 @@ class ImageDataset(Dataset):
         self.data = [file for file in files if file.endswith(('.jpg', '.jpeg', '.png', '.webp'))]
         
         if len(self.data) == 0:
-            raise RuntimeError(f'empty data: self.data_dir')
+            raise RuntimeError(f'empty data: {self.data_dir}')
         
         if 0 < (limit or 0):
             self.data = self.data[:limit]
