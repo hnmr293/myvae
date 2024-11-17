@@ -50,6 +50,8 @@ def train(
     last_saved = None
     
     def save_model_hparams(epoch: int, steps: int):
+        nonlocal last_saved
+        
         name = f'{epoch:05d}_{steps:08d}.ckpt'
         dir = acc.get_tracker('wandb').run.id
         path = f'{dir}/{name}'
@@ -117,6 +119,9 @@ def validate(
 ):
     val_results: list[VAEOutput] = []
     
+    model_is_training = model.training
+    model.eval()
+    
     with torch.inference_mode():
         # for torch.compile
         torch.compiler.cudagraph_mark_step_begin()
@@ -176,6 +181,8 @@ def validate(
                 'val/psnr': torch.mean(val_psnr).item(),
                 'val/ssim (grayscale)': wandb.Histogram(np_histogram=val_ssim_hist),
             }, step=global_steps)
+    
+    model.train(model_is_training)
 
 
 def save_model(
