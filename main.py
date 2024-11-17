@@ -197,7 +197,11 @@ def load_model(path: str|Path, init):
     
     conf = parse_dict(metadata)
     
-    init.model.load_state_dict(sd['model'])
+    sd_ = sd['state_dict']
+    # remove compile wrapper
+    sd_ = {k.replace('_orig_mod.', ''): v for k, v in sd_.items()}
+    
+    init.model.load_state_dict(sd_)
     init.optimizer.load_state_dict(sd['optimizer'])
     init.scheduler.load_state_dict(sd['scheduler'])
     
