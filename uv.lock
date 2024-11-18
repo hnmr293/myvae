@@ -338,6 +338,7 @@ dependencies = [
     { name = "jsonargparse" },
     { name = "natsort" },
     { name = "pillow" },
+    { name = "pytorch-optimizer" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "tqdm" },
@@ -352,6 +353,7 @@ requires-dist = [
     { name = "jsonargparse", specifier = ">=4.34.0" },
     { name = "natsort", specifier = ">=8.4.0" },
     { name = "pillow", specifier = ">=11.0.0" },
+    { name = "pytorch-optimizer", git = "https://github.com/kozistr/pytorch_optimizer" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "torchvision", specifier = ">=0.20.1" },
     { name = "tqdm", specifier = ">=4.67.0" },
@@ -659,6 +661,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/27/c2/d034856ac47e3b3cdfa9720d0e113902e615f4190d5d1bdb8df4b2015fb2/psutil-6.1.0-cp36-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d905186d647b16755a800e7263d43df08b790d709d575105d419f8b6ef65423a", size = 288804 },
     { url = "https://files.pythonhosted.org/packages/ea/55/5389ed243c878725feffc0d6a3bc5ef6764312b6fc7c081faaa2cfa7ef37/psutil-6.1.0-cp37-abi3-win32.whl", hash = "sha256:1ad45a1f5d0b608253b11508f80940985d1d0c8f6111b5cb637533a0e6ddc13e", size = 250386 },
     { url = "https://files.pythonhosted.org/packages/11/91/87fa6f060e649b1e1a7b19a4f5869709fbf750b7c8c262ee776ec32f3028/psutil-6.1.0-cp37-abi3-win_amd64.whl", hash = "sha256:a8fb3752b491d246034fa4d279ff076501588ce8cbcdbb62c32fd7a377d996be", size = 254228 },
+]
+
+[[package]]
+name = "pytorch-optimizer"
+version = "3.2.0"
+source = { git = "https://github.com/kozistr/pytorch_optimizer#3c22ca1d8fd403a168d7c50a2e67d8bdd902c68d" }
+dependencies = [
+    { name = "numpy" },
+    { name = "torch" },
 ]
 
 [[package]]
