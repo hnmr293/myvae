@@ -236,6 +236,12 @@ def validate(
             val_z_mean = torch.mean(gather(lambda x: x.encoder_output.mean.reshape(-1), cat=True))
             val_z_var = torch.mean(gather(lambda x: x.encoder_output.logvar.reshape(-1), cat=True)).exp()
             
+            # z.mean の分散を計算する
+            # 1. 郡内分散
+            val_z_mean_var_intra = torch.mean(gather(lambda x: torch.var(x.encoder_output.mean)))
+            # 2. 群間分散
+            val_z_mean_var_inter = torch.var(gather(lambda x: torch.mean(x.encoder_output.mean))) * val_results[0].encoder_output.mean.numel()
+            
             val_extra_losses = {
                 f'val/loss/{fn.name.upper()}': torch.mean(gather(lambda x: fn(x))).item()
                 for fn in val_losses
@@ -244,6 +250,9 @@ def validate(
             acc.log({
                 'val/z/mean': val_z_mean.item(),
                 'val/z/var': val_z_var.item(),
+                'val/z/mean_within_var': val_z_mean_var_intra.item(),
+                'val/z/mean_between_var': val_z_mean_var_inter.item(),
+                'val/z/mean_var': (val_z_mean_var_intra + val_z_mean_var_inter).item(),
                 'val/loss/total': val_total_loss.item(),
                 **val_extra_losses,
             }, step=global_steps)
