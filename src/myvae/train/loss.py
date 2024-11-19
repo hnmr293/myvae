@@ -25,6 +25,14 @@ def get_loss_fn(name: str) -> 'Type[Loss]':
     raise RuntimeError(f'unknown loss type: {name}')
 
 
+def normalized_l1(x: Tensor, y: Tensor):
+    assert x.shape == y.shape
+    x = x.view((1, -1))
+    y = y.view((1, -1))
+    n = x.size(-1)
+    return tf.l1_loss(x, y) / (n ** 0.5)
+
+
 def kld(z: EncoderOutput) -> Tensor:
     mu = z.mean
     logvar = z.logvar
@@ -124,4 +132,64 @@ class GramMatrixL1Loss(Loss):
             if self.normalize:
                 n = vec_target.size(-1)
                 loss = loss / (n ** 0.5)
+        return loss
+
+
+class LaplacianLoss(Loss):
+    name = 'laplacian'
+    def __init__(self, eight: bool = False):
+        self.eight = eight
+    
+    @property
+    def kernel4(self):
+        return torch.tensor([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], dtype=torch.float32)[None]
+    
+    @property
+    def kernel8(self):
+        return torch.tensor([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]], dtype=torch.float32)[None]
+    
+    @property
+    def kernel(self):
+        return self.kernel8 if self.eight else self.kernel4
+    
+    def apply_laplacian(self, x: Tensor, kernel: Tensor):
+        input_dim = x.ndim
+        if x.ndim == 2:
+            x = x[None, None]
+        elif x.ndim == 3:
+            x = x[None]
+        assert x.ndim == 4
+        B, C, H, W = x.shape
+        k = (
+            kernel.view((1, 1, kernel.size(-2), kernel.size(-1))) # (1, 1, 3, 3)
+            .repeat((C, 1, 1, 1)) # (C, 1, 3, 3)
+            .to(device=x.device)
+        )
+        out = tf.conv2d(x.float(), k.float(), groups=C)
+        return out.view((B, C, H-k.size(-2)+1, W-k.size(-1)+1)[-input_dim:])
+    
+    def __call__(self, out: VAEOutput):
+        with torch.autocast(out.input.device.type, enabled=False):
+            kernel = self.kernel.to(dtype=out.input.dtype, device=out.input.device)
+            pred = self.apply_laplacian(out.decoder_output.value, kernel)
+            target = self.apply_laplacian(out.input, kernel)
+            # L1 loss averaged over sequence
+            loss = normalized_l1(pred, target)
+        return loss
+
+
+class GMLaplacianLoss(LaplacianLoss):
+    name = 'gmlaplacian'
+    def __call__(self, out: VAEOutput):
+        with torch.autocast(out.input.device.type, enabled=False):
+            # ラプラシアンフィルタをかける
+            kernel = self.kernel.to(dtype=out.input.dtype, device=out.input.device)
+            pred = self.apply_laplacian(out.decoder_output.value, kernel)
+            target = self.apply_laplacian(out.input, kernel)
+            # GM loss を計算する
+            pred = pred.flatten(2)
+            target = target.flatten(2)
+            gm_target = pred @ pred.mT
+            gm_pred = target @ target.mT
+            loss = normalized_l1(gm_pred, gm_target)
         return loss
