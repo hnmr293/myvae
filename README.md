@@ -32,3 +32,12 @@ $ uv run accelerate launch main.py config/train.yaml
 # `pip` を使う場合
 (myvae) $ accelerate launch main.py config/train.yaml
 ```
+
+## Inference
+
+```bash
+# `uv` を使う場合
+$ uv run infer.py model.ckpt image.png
+# `pip` を使う場合
+(myvae) $ python infer.py model.ckpt image.png
+```
