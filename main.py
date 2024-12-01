@@ -152,6 +152,8 @@ def train(
             pbar.set_description(f'[Epoch {epoch}]')
             
             for step, batch in enumerate(pbar):
+                lr = scheduler.get_last_lr()[0]  # for logging
+                
                 with acc.autocast(), acc.accumulate(model):
                     x = batch
                     y: VAEOutput = model(x)
@@ -167,6 +169,7 @@ def train(
                 if 0 < log_freq and (global_steps + 1) % log_freq == 0:
                     acc.log({
                         'train/loss': loss.item(),
+                        'lr': lr,
                     }, step=global_steps)
                 
                 if 0 < val_freq and (global_steps + 1) % val_freq == 0:
@@ -178,6 +181,10 @@ def train(
                 global_steps += 1
             
         # epoch end
+        
+        acc.log({
+            'epoch': epoch,
+        }, step=global_steps-1)
         
         # validation
         if 0 < val_epochs and (epoch + 1) % val_epochs == 0:
