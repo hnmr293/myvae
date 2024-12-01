@@ -67,12 +67,12 @@ class TrainConf(TrainConfParams):
     scheduler: torch.optim.lr_scheduler.LRScheduler
 
 
-def load_config_from_arg():
-    return load_config_from_path(parse_config_path())
+def load_config_from_arg(only_model: bool = False):
+    return load_config_from_path(parse_config_path(), only_model)
 
 
-def load_config_from_path(path: str|Path):
-    return parse_config(path)
+def load_config_from_path(path: str|Path, only_model: bool = False):
+    return parse_config(path, only_model)
 
 
 def parse_config_path():
@@ -83,41 +83,45 @@ def parse_config_path():
     return path
 
 
-def parse_config(path: Path):
-    p = create_parser()
+def parse_config(path: Path, only_model: bool = False):
+    p = create_parser(only_model)
     cfg = p.parse_path(path)
-    init = init_args(p, cfg)
+    init = init_args(p, cfg, only_model)
     return init
 
 
-def parse_dict(obj: dict):
-    p = create_parser()
+def parse_dict(obj: dict, only_model: bool = False):
+    p = create_parser(only_model)
+    if only_model:
+        obj = {k: obj[k] for k in ('project', 'train', 'model') if k in obj}
     cfg = p.parse_object(obj)
-    init = init_args(p, cfg)
+    init = init_args(p, cfg, only_model)
     return init
 
 
-def create_parser():
+def create_parser(only_model: bool = False):
     from jsonargparse import ArgumentParser
     p = ArgumentParser()
     p.add_dataclass_arguments(TrainConfParams, 'train')
     p.add_argument('--project', type=str)
-    p.add_argument('--dataset', type=torch.utils.data.Dataset)
-    p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
-    p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
-    p.add_argument('--val_dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
+    if not only_model:
+        p.add_argument('--dataset', type=torch.utils.data.Dataset)
+        p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
+        p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
+        p.add_argument('--val_dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
     p.add_class_arguments(myvae.VAE, 'model')
     return p
 
 
-def init_args(p, cfg):
+def init_args(p, cfg, only_model: bool = False):
     init = p.instantiate_classes(cfg)
     
-    init.dataloader = init.dataloader(init.dataset, init.train.batch_size)
-    init.val_dataloader = init.val_dataloader(init.val_dataset, 1)  # 何かあると怖いのでバリデーション時のバッチサイズは1にしておく
-    init.train.optimizer = init.train.optimizer(init.model.parameters())
-    init.train.scheduler = init.train.scheduler(init.train.optimizer)
-    
+    if not only_model:
+        init.dataloader = init.dataloader(init.dataset, init.train.batch_size)
+        init.val_dataloader = init.val_dataloader(init.val_dataset, 1)  # 何かあると怖いのでバリデーション時のバッチサイズは1にしておく
+        init.train.optimizer = init.train.optimizer(init.model.parameters())
+        init.train.scheduler = init.train.scheduler(init.train.optimizer)
+        
     init.train = TrainConf(**vars(init.train))
     
     return init

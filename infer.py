@@ -28,7 +28,7 @@ def load_model(path: Path):
     from myvae import VAE
     from myvae.train import parse_dict
     
-    init = parse_dict(conf)
+    init = parse_dict(conf, only_model=True)
     model = init.model
     assert isinstance(model, VAE)
     
