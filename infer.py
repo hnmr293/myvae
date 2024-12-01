@@ -14,6 +14,8 @@ def parse_args():
     p.add_argument('--dtype', type=str, default='float32')
     p.add_argument('--device', type=str, default='cuda:0')
     p.add_argument('--seed', type=int, default=-1)
+    p.add_argument('--crop', action='store_true')
+    p.add_argument('--diff', action='store_true')
     
     args = p.parse_args()
     
@@ -67,6 +69,19 @@ def iter_images(path: Path) -> Iterator[Image.Image]:
         yield img
 
 
+def crop(img: Image.Image, r: int):
+    assert r & (r - 1) == 0, f'r must be power of 2, but {r} given'
+    W, H = img.size
+    w = W & ~(r-1)
+    h = H & ~(r-1)
+    x = (W - w) // 2
+    y = (H - h) // 2
+    cropped = img.crop((x, y, x+w, y+h))
+    assert cropped.width == w
+    assert cropped.height == h
+    return cropped
+    
+
 def main():
     args = parse_args()
     
@@ -85,8 +100,12 @@ def main():
         assert isinstance(dtype, torch.dtype)
         
         model = load_model(args.MODEL).to(dtype=dtype, device=device)
+        r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)  # 縮小率
         
         for i, img in enumerate(iter_images(args.IMAGE_OR_IMAGEDIR)):
+            if args.crop:
+                img = crop(img, r)
+            
             t0 = to_tensor(img)
             t = normalize(t0, [0.5], [0.5])
             t = t.to(dtype=dtype, device=device)
@@ -113,7 +132,14 @@ def main():
                 t0 = tf.pad(t0, (0, t_pad_x, 0, t_pad_y))
                 gen_t = tf.pad(gen_t, (0, gen_t_pad_x, 0, gen_t_pad_y))
             
-            img = torch.cat((t0, gen_t.cpu()), dim=-1)
+            gen_t = gen_t.cpu()
+            
+            if args.diff:
+                diff = (t0 - gen_t).abs()
+                img = torch.cat((t0, gen_t, diff), dim=-1)
+            else:
+                img = torch.cat((t0, gen_t), dim=-1)
+            
             img = to_pil_image(img)
             img.save(f'{i:05d}.png')
 
