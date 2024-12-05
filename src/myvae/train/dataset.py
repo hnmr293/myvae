@@ -5,6 +5,8 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as tvt
+import torchvision.transforms.functional as tvf
+from torchvision.io import VideoReader
 
 
 class DummyDataset(Dataset):
@@ -83,3 +85,96 @@ class ImageDataset(Dataset):
     def __getitem__(self, index):
         data = self.data[index]
         return self.transform(Image.open(data).convert('RGB'))
+
+
+class VideoDataset(Dataset):
+    def __init__(
+        self,
+        data_dir: Path,
+        frames: int,
+        fps: float|None = None,
+        ss: float|None = None,
+        limit: int|None = None,
+    ):
+        super().__init__()
+        self.data_dir = Path(data_dir)
+        self.frames = frames
+        self.fps = fps
+        self.ss = ss
+        
+        self.data = list(self.data_dir.rglob('*.mp4'))
+        if len(self.data) == 0:
+            raise RuntimeError(f'empty data: {self.data_dir}')
+        
+        if 0 < (limit or 0):
+            self.data = self.data[:limit]
+        
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        path = self.data[index]
+        reader = VideoReader(str(path))
+        
+        meta = reader.get_metadata()['video']
+        fps = meta['fps'][0]
+        duration = meta['duration'][0]
+        
+        total_frames = (fps * duration).__floor__()
+        
+        # 適当に切り出す
+        if total_frames < self.frames:
+            raise RuntimeError(f'the number of frames = {total_frames}, but {self.frames} is required: {path}')
+        
+        # 何フレームに1回フレームを切り出すか
+        frame_step = (
+            1.0 if self.fps is None
+            else fps / self.fps
+        )
+        frame_step = max(frame_step, 0.0)
+        
+        # 必要なフレーム数
+        required_frames = (frame_step * self.frames).__ceil__()
+        if total_frames < required_frames:
+            raise RuntimeError(f'the number of frames = {total_frames}, but {required_frames} is required: {path}')
+        
+        ss = self.ss
+        if ss is None or ss < 0:
+            if total_frames == required_frames:
+                ss = 0
+            else:
+                ss_frame = torch.randint(0, total_frames - required_frames, ()).item()
+                ss = ss_frame / fps
+        ss = max(ss, 0)
+        
+        reader.seek(ss, keyframes_only=True)  # pyav バックエンドは precise seek に対応していない
+        
+        frames = []
+        current_frames = 0.0
+        for _ in range(required_frames):
+            try:
+                frame = next(reader)
+            except StopIteration:
+                reader.seek(0, keyframes_only=True)
+                frame = next(reader)
+            if len(frames) == 0:
+                # first one
+                frames.append(frame['data'])
+                continue
+            current_frames += 1
+            if frame_step <= current_frames:
+                frames.append(frame['data'])
+                current_frames -= frame_step
+        
+        assert len(frames) != 0
+        
+        while len(frames) < self.frames:
+            # 何かが起きてフレーム数が足りないので、とりあえず繰り返しにしておく
+            frames += frames
+        
+        frames = torch.stack(frames[:self.frames])
+        
+        frames = frames / 255
+        frames = tvf.normalize(frames, [0.5], [0.5])
+        
+        return frames

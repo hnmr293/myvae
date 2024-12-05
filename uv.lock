@@ -26,6 +26,32 @@ wheels = [
 ]
 
 [[package]]
+name = "av"
+version = "14.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/67/c2d801869fa4919df4841008dfba6fd42f98c658875c215312c30b9551d4/av-14.0.0.tar.gz", hash = "sha256:9dc5f2deca3f2dffdc08d3258855ce85e80335450e93e58cec0fff364fcbd69d", size = 3921038 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/de/bcc42c2dadf1957b8d9509e7fb3a4704248c6ff4e8a9d5712edbe66d2e0d/av-14.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:1854dab5619a529b1fd836c9d7a569866ea0f3eca077d555dc6bdb2c3b42cf3c", size = 19526743 },
+    { url = "https://files.pythonhosted.org/packages/ed/8e/9b7cd107ba52f37a35876da29770d24baa5761a622cf44c4fa40b8368adc/av-14.0.0-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:a5057763b8b5ca10076e1bf65a9e370b30dc3c4020aecb3ca22c21b56376bf99", size = 24330791 },
+    { url = "https://files.pythonhosted.org/packages/5f/a5/8b8782e5bbafa6f8b1e193a7c6fa2e1ea1b4ba75042eed62ef6cc2ac2de3/av-14.0.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ed9f9c4d468a883c9e7b144fe036cee4478b7bc7bd71f561f2fb11a57d1439ef", size = 31989689 },
+    { url = "https://files.pythonhosted.org/packages/49/4c/de8e1edb82f5abdcb47a93227961928a7fa797df3a489c5e4fb3cc7e2a95/av-14.0.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:4d1cf5afcb7e7dc56c79bfa3770adbef20aa5385136ca6f2cc6f8ee38d0a366f", size = 31336822 },
+    { url = "https://files.pythonhosted.org/packages/d7/ca/f8bfe664b3363ea7431bcb93ec9cd45a2603b47c054c6d8043bc234ebe32/av-14.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:99656d0c5467b382df3ac23cafd197e2c2b5d72ed5ebc58086281ee623ea129e", size = 33810935 },
+    { url = "https://files.pythonhosted.org/packages/14/0c/b6e0c8a123ac653f0a147b0a51f4174c2d67524655b78624cdfeb5976438/av-14.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:7ba11274dd9b051f09eafd6740bfe409cf9c435cbcb493ae6f4d7cad52576d90", size = 25842948 },
+    { url = "https://files.pythonhosted.org/packages/3a/35/54e3859d81b72a067fe2e17196d9fab652fe5c587772aab5abda65562145/av-14.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:12449c460bf9d9166d8fd5fed585c2696038147dea0ff70c94f1258ff112bb9a", size = 19529829 },
+    { url = "https://files.pythonhosted.org/packages/ec/db/8862ca57bb65464f7935ee1dcadb65aba673ee267a1d90beabbd56063717/av-14.0.0-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:73252035d4b0d065c9222e8c60b6b61df370c136839f8224cab697db90ab7743", size = 24343341 },
+    { url = "https://files.pythonhosted.org/packages/f8/27/05f4974b0e885da35fb37cd3f97fad6cd380fc5956c750623a6f4412109b/av-14.0.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1e17ec54a6f85841595bbc3fca693f2acb516fab295f746f1f8d0819ebe1dc12", size = 32244479 },
+    { url = "https://files.pythonhosted.org/packages/e6/50/48f5550a6bce84fd4de7a6afeb0b83b0bdf75fdeedb3b8520dddffe518c0/av-14.0.0-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8b5ac245d3d13cbf58e6f78d4d7a68fd274ed13c8a0ebf4a2b12e1e95e985673", size = 31601227 },
+    { url = "https://files.pythonhosted.org/packages/30/b8/fe6264b95cf0d4adf24a04ba2ac45b843bb835378043e59143e1df252733/av-14.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fdcbe47de3b985ceb88fa0bc9de916200dcdfa2a932a11bdecc6705b5ffa25cf", size = 34158385 },
+    { url = "https://files.pythonhosted.org/packages/3a/a0/96702f4e8c8ff92695c5c931229a0f82096b3936082aa5edb3d96698dc7f/av-14.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:6276d9609a82bb00d265ea529cb7361d67384dd15f68fbf480e7a0291c092733", size = 25846895 },
+    { url = "https://files.pythonhosted.org/packages/17/fd/d2ea796d92875874812386f2a040ca92b7cbeed62bfe65c4d2e3cb4d0926/av-14.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:54800acfe9e886a9121601bcafe32553ced2ad8529666242a7dfabafb48075e2", size = 19489570 },
+    { url = "https://files.pythonhosted.org/packages/93/2f/ffb5645e5c6a93f2a99ed0680e1cef0217c195a85b1f931c58da436bc2dc/av-14.0.0-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:eb4612015a50e474a32055e226c76032e2aaf45ba9e566e7afe32623af122c0d", size = 24302646 },
+    { url = "https://files.pythonhosted.org/packages/9d/7d/022eba24a1c4f6f90fe3bcd6718ad57ee9ac7ccfb3a94ea6c7c1f829459e/av-14.0.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b9b2b00ef066a7141ceb58d152037e2a7a802c8b7cf5cee573dedab47b4464ca", size = 31896871 },
+    { url = "https://files.pythonhosted.org/packages/59/87/dd02522850d9f5ea01c0b0e5caff97369ff143681d798ae5689589b60553/av-14.0.0-cp313-cp313-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:e747b9c4facd56d45059eeff386ccf8046bc0b9ce7daae935e8ec8f1a68f5442", size = 31274033 },
+    { url = "https://files.pythonhosted.org/packages/8a/73/b718a5f77e430b52fedeb6ede9a37fe8e69ae3b92bc85ca4f7f374e02056/av-14.0.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2033b6f0a0e3f2caab68bb31ccd09ad78e5e27df64c102e34d02bffac21d29b8", size = 33821262 },
+    { url = "https://files.pythonhosted.org/packages/c8/dd/bd31cff3aaa6512ee8c4dba66c8d5a69a9b7bdbfb86bcb28013d6ad2c3a4/av-14.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:22125de1e63b412fbdbf5817df85f2056b2a2de86698fdae48fb8f914219ae68", size = 25818259 },
+]
+
+[[package]]
 name = "certifi"
 version = "2024.8.30"
 source = { registry = "https://pypi.org/simple" }
@@ -333,6 +359,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
+    { name = "av" },
     { name = "einops" },
     { name = "huggingface-hub", extra = ["cli", "hf-transfer"] },
     { name = "jsonargparse" },
@@ -348,6 +375,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.1.1" },
+    { name = "av", specifier = ">=14.0.0" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "huggingface-hub", extras = ["cli", "hf-transfer"], specifier = ">=0.26.2" },
     { name = "jsonargparse", specifier = ">=4.34.0" },
