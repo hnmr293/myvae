@@ -8,11 +8,12 @@ import torch.nn.functional as tf
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
 from torchvision.utils import make_grid
+import einops
 from accelerate import Accelerator
 from accelerate.utils import tqdm, gather_object
 import wandb
 
-from myvae import VAE, VAEOutput
+from myvae import VAE, VAE3D, VAEOutput
 from myvae.train import TrainConf
 import myvae.train.loss as losses
 from myvae.train.metrics import psnr, ssim
@@ -101,7 +102,7 @@ class ModelSaverHf(ModelSaver):
 
 def train(
     acc: Accelerator,
-    model: VAE,
+    model: VAE|VAE3D,
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
@@ -199,7 +200,7 @@ def train(
 
 def validate(
     acc: Accelerator,
-    model: VAE,
+    model: VAE|VAE3D,
     val_data: DataLoader,
     loss_fn: losses.Loss,
     global_steps: int,
@@ -276,13 +277,36 @@ def validate(
             width = min(t.size(-1) for t in input_images)
             height = min(t.size(-2) for t in input_images)
             
-            input_images = torch.stack([t[:, :height, :width] for t in input_images])
-            generated_images = torch.stack([t[:, :height, :width] for t in generated_images])
-            
-            nrow = (len(input_images) ** 0.5).__ceil__()
-            image_left = make_grid(input_images, nrow=nrow)
-            image_right = make_grid(generated_images, nrow=nrow)
-            image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+            if input_images[0].ndim == 3:
+                # 2D VAE
+                input_images = torch.stack([t[..., :height, :width] for t in input_images])
+                generated_images = torch.stack([t[..., :height, :width] for t in generated_images])
+                
+                nrow = (len(input_images) ** 0.5).__ceil__()
+                image_left = make_grid(input_images, nrow=nrow)
+                image_right = make_grid(generated_images, nrow=nrow)
+                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+            else:
+                # 3D VAE
+                assert input_images[0].ndim == 4
+                frames = max(t.size(0) for t in input_images)
+                input_images = torch.stack([
+                    t[:frames, :, :height, :width] if frames <= t.size(0)
+                    else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
+                    for t in input_images
+                ])
+                generated_images = torch.stack([
+                    t[:frames, :, :height, :width] if frames <= t.size(0)
+                    else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
+                    for t in generated_images
+                ])
+                # (b f c h w) -> (b c h (f w))
+                input_images = einops.rearrange(input_images, 'b f c h w -> b c h (f w)')
+                generated_images = einops.rearrange(generated_images, 'b f c h w -> b c h (f w)')
+                
+                image_left = make_grid(input_images, nrow=1)
+                image_right = make_grid(generated_images, nrow=1)
+                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
             
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],
@@ -329,7 +353,7 @@ def run_train(init, conf_dict):
     val_data = init.val_dataloader
     train_conf = init.train
     
-    assert isinstance(model, VAE)
+    assert isinstance(model, (VAE, VAE3D))
     assert isinstance(data, DataLoader)
     assert isinstance(val_data, DataLoader)
     assert isinstance(train_conf, TrainConf)
@@ -360,9 +384,14 @@ def run_train(init, conf_dict):
     def collate_fn(data: list[torch.Tensor]):
         assert isinstance(data, (tuple, list))
         assert all(isinstance(t, torch.Tensor) for t in data)
-        assert all(t.ndim == 3 for t in data)
-        # t := (C, H, W)
-        assert all(t.size(0) == 3 for t in data)
+        if data[0].ndim == 3:
+            # t := (C, H, W)
+            assert all(t.ndim == 3 for t in data)
+            assert all(t.size(0) == 3 for t in data)
+        else:
+            # t := (F, C, H, W)
+            assert all(t.ndim == 4 for t in data)
+            assert all(t.size(1) == 3 for t in data)
         
         # 画質の観点から拡縮は行わず、バッチ内の一番小さい画像サイズに合わせる
         # 大きな画像は縮小するのではなく、一部を切り出す

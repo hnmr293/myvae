@@ -23,9 +23,11 @@ val_dataloader:
         drop_last: true
 
 model:
-    config:
-        encoder: {}
-        decoder: {}
+    class_path: myvae.VAE
+    init_args:
+        config:
+            encoder: {}
+            decoder: {}
 
 train:
     n_epochs: 50

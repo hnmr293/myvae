@@ -109,7 +109,7 @@ def create_parser(only_model: bool = False):
         p.add_argument('--val_dataset', type=torch.utils.data.Dataset)
         p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
         p.add_argument('--val_dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
-    p.add_class_arguments(myvae.VAE, 'model')
+    p.add_argument('--model', type=torch.nn.Module)
     return p
 
 

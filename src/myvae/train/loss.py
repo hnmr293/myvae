@@ -123,8 +123,8 @@ class GramMatrixL1Loss(Loss):
         self.normalize = normalize
     
     def __call__(self, out: VAEOutput):
-        vec_target = out.input.flatten(2).float()
-        vec_pred = out.decoder_output.value.flatten(2).float()
+        vec_target = out.input.flatten(-2).float()
+        vec_pred = out.decoder_output.value.flatten(-2).float()
         with torch.autocast(vec_target.device.type, enabled=False):
             gm_target = vec_target @ vec_target.mT
             gm_pred = vec_pred @ vec_pred.mT
@@ -171,8 +171,15 @@ class LaplacianLoss(Loss):
     def __call__(self, out: VAEOutput):
         with torch.autocast(out.input.device.type, enabled=False):
             kernel = self.kernel.to(dtype=out.input.dtype, device=out.input.device)
-            pred = self.apply_laplacian(out.decoder_output.value, kernel)
-            target = self.apply_laplacian(out.input, kernel)
+            if out.input.ndim == 4:
+                # 2D VAE
+                pred = self.apply_laplacian(out.decoder_output.value, kernel)
+                target = self.apply_laplacian(out.input, kernel)
+            else:
+                # 3D VAE
+                assert out.input.ndim == 5
+                pred = torch.stack([self.apply_laplacian(x, kernel) for x in out.decoder_output.value])
+                target = torch.stack([self.apply_laplacian(x, kernel) for x in out.input])
             # L1 loss averaged over sequence
             loss = normalized_l1(pred, target)
         return loss
@@ -184,11 +191,18 @@ class GMLaplacianLoss(LaplacianLoss):
         with torch.autocast(out.input.device.type, enabled=False):
             # ラプラシアンフィルタをかける
             kernel = self.kernel.to(dtype=out.input.dtype, device=out.input.device)
-            pred = self.apply_laplacian(out.decoder_output.value, kernel)
-            target = self.apply_laplacian(out.input, kernel)
+            if out.input.ndim == 4:
+                # 2D VAE
+                pred = self.apply_laplacian(out.decoder_output.value, kernel)
+                target = self.apply_laplacian(out.input, kernel)
+            else:
+                # 3D VAE
+                assert out.input.ndim == 5
+                pred = torch.stack([self.apply_laplacian(x, kernel) for x in out.decoder_output.value])
+                target = torch.stack([self.apply_laplacian(x, kernel) for x in out.input])
             # GM loss を計算する
-            pred = pred.flatten(2)
-            target = target.flatten(2)
+            pred = pred.flatten(-2).float()
+            target = target.flatten(-2).float()
             gm_target = pred @ pred.mT
             gm_pred = target @ target.mT
             loss = normalized_l1(gm_pred, gm_target)
