@@ -39,7 +39,7 @@ class WebpDataset(Dataset):
         super().__init__()
         import glob
         self.data_dir = Path(data_dir)
-        self.data = glob.glob(str(self.data_dir / '*.webp'))
+        self.data = sorted(glob.glob(str(self.data_dir / '*.webp')))
         if 0 < (limit or 0):
             self.data = self.data[:limit]
         self.transform = tvt.Compose([
@@ -66,7 +66,7 @@ class ImageDataset(Dataset):
         self.data_dir = Path(data_dir)
         
         files = glob.glob(str(self.data_dir / '*.*'))
-        self.data = [file for file in files if file.endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+        self.data = sorted([file for file in files if file.endswith(('.jpg', '.jpeg', '.png', '.webp'))])
         
         if len(self.data) == 0:
             raise RuntimeError(f'empty data: {self.data_dir}')
@@ -102,7 +102,7 @@ class VideoDataset(Dataset):
         self.fps = fps
         self.ss = ss
         
-        self.data = list(self.data_dir.rglob('*.mp4'))
+        self.data = sorted(self.data_dir.rglob('*.mp4'))
         if len(self.data) == 0:
             raise RuntimeError(f'empty data: {self.data_dir}')
         
