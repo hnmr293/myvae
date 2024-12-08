@@ -13,7 +13,7 @@ from accelerate import Accelerator
 from accelerate.utils import tqdm, gather_object
 import wandb
 
-from myvae import VAE, VAE3D, VAEOutput
+from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
 from myvae.train import TrainConf
 import myvae.train.loss as losses
 from myvae.train.metrics import psnr, ssim
@@ -102,7 +102,7 @@ class ModelSaverHf(ModelSaver):
 
 def train(
     acc: Accelerator,
-    model: VAE|VAE3D,
+    model: VAE|VAE3D|VAE3DWavelet,
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
@@ -200,7 +200,7 @@ def train(
 
 def validate(
     acc: Accelerator,
-    model: VAE|VAE3D,
+    model: VAE|VAE3D|VAE3DWavelet,
     val_data: DataLoader,
     loss_fn: losses.Loss,
     global_steps: int,
@@ -353,7 +353,7 @@ def run_train(init, conf_dict):
     val_data = init.val_dataloader
     train_conf = init.train
     
-    assert isinstance(model, (VAE, VAE3D))
+    assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
     assert isinstance(data, DataLoader)
     assert isinstance(val_data, DataLoader)
     assert isinstance(train_conf, TrainConf)

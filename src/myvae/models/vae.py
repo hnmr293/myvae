@@ -4,8 +4,9 @@ import torch
 import torch.nn as nn
 
 from .configs import VAEConfig, EncoderConfig, DecoderConfig
-from .encoder import Encoder, Encoder3D
+from .encoder import Encoder, Encoder3D, Encoder3DWavelet
 from .decoder import Decoder, Decoder3D
+from ..wavelet import dwt3d, idwt3d, HaarWavelet
 
 
 @dataclass
@@ -132,6 +133,78 @@ class VAE3D(nn.Module):
     
     def encode(self, x: torch.Tensor) -> EncoderOutput:
         z = self.encoder(x)
+        z_mean, z_logvar = z.chunk(2, dim=-3)
+        return EncoderOutput(z_mean, z_logvar)
+    
+    def decode(self, z: torch.Tensor) -> DecoderOutput:
+        x = self.decoder(z)
+        return DecoderOutput(x)
+    
+    def forward(
+        self,
+        x: torch.Tensor,
+        det: bool = False,
+        rng: torch.Generator|None = None
+    ) -> VAEOutput:
+        encoded = self.encode(x)
+        
+        if det:
+            z = encoded.mean
+        else:
+            z = encoded.sample(rng)
+        
+        y = self.decode(z)
+        
+        return VAEOutput(x, encoded, y)
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        self.encoder.apply_gradient_checkpointing(enabled)
+        self.decoder.apply_gradient_checkpointing(enabled)
+        return self
+
+
+class VAE3DWavelet(nn.Module):
+    def __init__(self, config: VAEConfig):
+        super().__init__()
+        self.wavelet = HaarWavelet()
+        self.encoder = Encoder3DWavelet(config.encoder)
+        self.decoder = Decoder3D(config.decoder)
+    
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device
+    
+    def get_dwt(self, x: torch.Tensor) -> list[torch.Tensor]:
+        # x := (b, f, c, h, w)
+        # gray = 0.299R + 0.587G + 0.114B
+        gray = x[:, :, 0, :, :] * 0.299 + x[:, :, 1, :, :] * 0.587 + x[:, :, 2, :, :] * 0.114
+        # (b, f, h, w)
+        dwt = dwt3d(gray, self.wavelet, level=self.encoder.level)
+        
+        cur = dwt
+        ret = []
+        while cur is not None:
+            t = torch.stack([
+                cur[key] for key
+                # (b, f, h, w)
+                in ('LLL', 'LLH', 'LHL', 'LHH', 'HLL', 'HLH', 'HHL', 'HHH')
+            ], dim=1)
+            # (b, c, f, h, w)
+            ret.append(t)
+            cur = cur.get('next', None)
+        
+        assert len(ret) == self.encoder.level
+        
+        return ret
+    
+    def encode(self, x: torch.Tensor, dwt: list[torch.Tensor]|None = None) -> EncoderOutput:
+        if dwt is None:
+            dwt = self.get_dwt(x)
+        z = self.encoder(x, dwt)
         z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
     
