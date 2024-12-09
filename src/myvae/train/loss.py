@@ -213,7 +213,7 @@ class LpipsLoss(Loss):
     name = 'lpips'
     def __init__(self):
         from lpips import LPIPS
-        self.lpips = LPIPS(net='vgg')
+        self.lpips = LPIPS(net='vgg', verbose=False)
     def __call__(self, out: VAEOutput):
         lpips = self.lpips.to(out.input.device)
         
