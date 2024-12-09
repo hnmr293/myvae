@@ -207,3 +207,21 @@ class GMLaplacianLoss(LaplacianLoss):
             gm_pred = target @ target.mT
             loss = normalized_l1(gm_pred, gm_target)
         return loss
+
+
+class LpipsLoss(Loss):
+    name = 'lpips'
+    def __init__(self):
+        from lpips import LPIPS
+        self.lpips = LPIPS(net='vgg')
+    def __call__(self, out: VAEOutput):
+        lpips = self.lpips.to(out.input.device)
+        
+        # (b, c, h, w)
+        # (b, f, c, h, w) -> (B, c, h, w)
+        target = out.input.reshape((-1, *out.input.shape[-3:]))
+        pred = out.decoder_output.value.reshape((-1, *out.decoder_output.value.shape[-3:]))
+        
+        dist = lpips(target, pred)
+        
+        return dist.mean()
