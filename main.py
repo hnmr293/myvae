@@ -62,9 +62,6 @@ class ModelSaverHf(ModelSaver):
     def __init__(self, hf_repo_id: str, use_async: bool, additional_params: dict[str, Any]):
         super().__init__(additional_params)
         
-        import os
-        os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '1'
-        
         from huggingface_hub import HfApi
         self.api = HfApi()
         self.repo_id = hf_repo_id
@@ -102,6 +99,7 @@ class ModelSaverHf(ModelSaver):
             except Exception as e:
                 import sys
                 print(str(e), file=sys.stderr)
+            self.last_future = None
 
 
 def save_model(
