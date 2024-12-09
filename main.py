@@ -10,7 +10,7 @@ import torchvision.transforms.functional as tvf
 from torchvision.utils import make_grid
 import einops
 from accelerate import Accelerator
-from accelerate.utils import tqdm, gather_object
+from accelerate.utils import tqdm, gather_object, TorchDynamoPlugin
 import wandb
 
 from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
@@ -47,11 +47,15 @@ class ModelSaver:
 
 
 class ModelSaverLocal(ModelSaver):
+    def __init__(self, acc: Accelerator, additional_params: dict[str, Any]):
+        super().__init__(additional_params)
+        self.acc = acc
+    
     def _save(self, path: Path, obj: dict[str, Any]):
         import os
         dir = path.parent
         os.makedirs(dir, exist_ok=True)
-        torch.save(obj, path)
+        self.acc.save(obj, path)
 
 
 class ModelSaverHf(ModelSaver):
@@ -100,12 +104,58 @@ class ModelSaverHf(ModelSaver):
                 print(str(e), file=sys.stderr)
 
 
+def save_model(
+    acc: Accelerator,
+    saver: ModelSaver,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    epoch: int,
+    steps: int,
+):
+    acc.wait_for_everyone()
+    
+    if acc.is_main_process:
+        dir = acc.get_tracker('wandb').run.id
+        name = f'{epoch:05d}_{steps:08d}.ckpt'
+        path = f'{dir}/{name}'
+        
+        def replace(key: str):
+            if isinstance(key, str):
+                # torch.compile 対応
+                key = key.replace('._orig_mod.', '.')
+            return key
+        
+        def detach(t):
+            if isinstance(t, dict):
+                return {
+                    replace(key): detach(val)
+                    for key, val in t.items()
+                }
+            if isinstance(t, (list, tuple)):
+                return type(t)(detach(v) for v in t)
+            if isinstance(t, torch.Tensor):
+                t = t.clone().detach().cpu()
+            return t
+        
+        sd = {
+            'state_dict': detach(acc.unwrap_model(model).state_dict()),
+            'optimizer': detach(acc.unwrap_model(optimizer).state_dict()),
+            'scheduler': detach(acc.unwrap_model(scheduler).state_dict()),
+        }
+        
+        saver.save(path, sd)
+    
+    acc.wait_for_everyone()
+
+
 def train(
     acc: Accelerator,
     model: VAE|VAE3D|VAE3DWavelet,
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
+    compile_options: dict[str, Any]|None,
     saver: ModelSaver,
 ):
     global_steps = 0
@@ -115,6 +165,10 @@ def train(
     scheduler = train_conf.scheduler
     
     torch.set_float32_matmul_precision(train_conf.matmul_precision)
+    
+    if compile_options is not None:
+        model = torch.compile(model, **compile_options)
+    
     model, data, val_data, optimizer, scheduler = acc.prepare(model, data, val_data, optimizer, scheduler)
     
     log_freq = train_conf.log_freq
@@ -128,23 +182,6 @@ def train(
         loss_name, loss_weight = loss_dict['type'], loss_dict['weight']
         loss_start_step = loss_dict.get('start_step', 0)
         loss_fn.add(loss_name, loss_weight, loss_start_step)
-    
-    
-    def save_model_hparams(epoch: int, steps: int):
-        if not acc.is_main_process:
-            return
-        dir = acc.get_tracker('wandb').run.id
-        name = f'{epoch:05d}_{steps:08d}.ckpt'
-        path = f'{dir}/{name}'
-        
-        sd = {
-            # torch.compile 対応
-            'state_dict': {k.replace('_orig_mod.', ''): v for k, v in acc.unwrap_model(model).state_dict().items()},
-            'optimizer': acc.unwrap_model(optimizer).state_dict(),
-            'scheduler': acc.unwrap_model(scheduler).state_dict(),
-        }
-        
-        saver.save(path, sd)
     
     acc.wait_for_everyone()
     
@@ -177,7 +214,7 @@ def train(
                     validate(acc, model, val_data, loss_fn, global_steps, train_conf)
                 
                 if 0 < save_freq and (global_steps + 1) % save_freq == 0:
-                    save_model_hparams(epoch, global_steps)
+                    save_model(acc, saver, model, optimizer, scheduler, epoch, global_steps)
                 
                 global_steps += 1
             
@@ -193,7 +230,7 @@ def train(
         
         # saving
         if 0 < save_epochs and (epoch + 1) % save_epochs == 0:
-            save_model_hparams(epoch, global_steps-1)
+            save_model(acc, saver, model, optimizer, scheduler, epoch, global_steps-1)
         
         acc.wait_for_everyone()
 
@@ -370,7 +407,14 @@ def run_train(init, conf_dict):
     acc = Accelerator(
         log_with='wandb',
         gradient_accumulation_steps=train_conf.grad_acc_steps,
+        dynamo_backend='no',  # コンパイル範囲を自分で指定したいので no にしておく
     )
+    
+    # torch.compile 対応
+    compile_options = TorchDynamoPlugin().to_kwargs()
+    if len(compile_options) == 0 or str(compile_options.get('backend', 'no')).upper() == 'NO':
+        # torch.compile 無効
+        compile_options = None
     
     acc.init_trackers(
         project_name=init.project,
@@ -417,11 +461,12 @@ def run_train(init, conf_dict):
         saver = ModelSaverHf(
             train_conf.hf_repo_id,
             train_conf.model_save_async,
-            additional_params={'config': conf_dict}
+            additional_params={'config': conf_dict, 'compile': compile_options}
         )
     else:
         saver = ModelSaverLocal(
-            additional_params={'config': conf_dict}
+            acc,
+            additional_params={'config': conf_dict, 'compile': compile_options}
         )
     
     if acc.is_main_process:
@@ -432,7 +477,7 @@ def run_train(init, conf_dict):
         pprint.pprint(conf_dict)
     
     try:
-        train(acc, model, data, val_data, train_conf, saver)
+        train(acc, model, data, val_data, train_conf, compile_options, saver)
     finally:
         acc.end_training()
         saver.close()
