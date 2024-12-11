@@ -1,5 +1,6 @@
 from pathlib import Path
 from concurrent.futures import Future
+import gc
 from typing import Callable, Any
 
 import numpy as np
@@ -378,7 +379,6 @@ def load_model(path: str|Path, init):
     init.train.optimizer.load_state_dict(sd['optimizer'])
     init.train.scheduler.load_state_dict(sd['scheduler'])
     
-    #run_train(conf, metadata)
     return conf, metadata
 
 
@@ -395,6 +395,9 @@ def run_train(init, conf_dict):
     
     if train_conf.pretrained_weight is not None:
         load_model(train_conf.pretrained_weight, init)
+    
+    gc.collect()
+    torch.cuda.empty_cache()
     
     model.train()
     model.requires_grad_(True)
