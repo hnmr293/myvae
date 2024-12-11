@@ -27,12 +27,12 @@ def load_model(path: Path):
     sd = torch.load(path, weights_only=True, map_location='cpu')
     conf = sd.pop('config')
     
-    from myvae import VAE
+    from myvae import VAE, VAE3D, VAE3DWavelet
     from myvae.train import parse_dict
     
     init = parse_dict(conf, only_model=True)
     model = init.model
-    assert isinstance(model, VAE)
+    assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
     
     sd = sd.pop('state_dict')
     # remove compile wrapper
