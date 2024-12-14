@@ -30,6 +30,13 @@ def load_model(path: Path):
     from myvae import VAE, VAE3D, VAE3DWavelet
     from myvae.train import parse_dict
     
+    if 'model' in conf and 'class_path' not in conf['model']:
+        # 旧バージョン対応
+        assert 'config' in conf['model']
+        conf['model'] = {
+            'class_path': 'myvae.VAE',
+            'init_args': conf['model'],
+        }
     init = parse_dict(conf, only_model=True)
     model = init.model
     assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
