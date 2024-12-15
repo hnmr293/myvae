@@ -63,11 +63,11 @@ class WebpDataset(Dataset):
     
     def __getitem__(self, index):
         data = self.data[index]
-        tensor: torch.Tensor = self.transform(Image.open(data).convert('RGB'))
+        tensor = self.transform(Image.open(data).convert('RGB'))
         if self.aug_flip_lr and random.random() < 0.5:
-            tensor = tensor.flip(dim=-1)
+            tensor = tensor.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
-            tensor = tensor.flip(dim=-2)
+            tensor = tensor.flip(dims=(-2,))
         return tensor
 
 
@@ -112,9 +112,9 @@ class ImageDataset(Dataset):
         data = self.data[index]
         tensor = self.transform(Image.open(data).convert('RGB'))
         if self.aug_flip_lr and random.random() < 0.5:
-            tensor = tensor.flip(dim=-1)
+            tensor = tensor.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
-            tensor = tensor.flip(dim=-2)
+            tensor = tensor.flip(dims=(-2,))
         return tensor
 
 
@@ -219,8 +219,8 @@ class VideoDataset(Dataset):
         frames = tvf.normalize(frames, [0.5], [0.5])
         
         if self.aug_flip_lr and random.random() < 0.5:
-            frames = frames.flip(dim=-1)
+            frames = frames.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
-            frames = frames.flip(dim=-2)
+            frames = frames.flip(dims=(-2,))
         
         return frames
