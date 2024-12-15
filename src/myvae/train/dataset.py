@@ -1,4 +1,6 @@
+import glob
 from pathlib import Path
+import random
 from typing import Sequence
 
 from PIL import Image
@@ -36,9 +38,11 @@ class WebpDataset(Dataset):
         data_dir: Path,
         limit: int|None = None,
         sort: bool = True,
+        aug_flip_lr: bool = False,
+        aug_flip_tb: bool = False,
     ):
         super().__init__()
-        import glob
+        
         self.data_dir = Path(data_dir)
         data = glob.glob(str(self.data_dir / '*.webp'))
         if sort:
@@ -51,13 +55,20 @@ class WebpDataset(Dataset):
             tvt.ToTensor(),
             tvt.Normalize([0.5], [0.5])
         ])
+        self.aug_flip_lr = aug_flip_lr
+        self.aug_flip_tb = aug_flip_tb
     
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, index):
         data = self.data[index]
-        return self.transform(Image.open(data).convert('RGB'))
+        tensor: torch.Tensor = self.transform(Image.open(data).convert('RGB'))
+        if self.aug_flip_lr and random.random() < 0.5:
+            tensor = tensor.flip(dim=-1)
+        if self.aug_flip_tb and random.random() < 0.5:
+            tensor = tensor.flip(dim=-2)
+        return tensor
 
 
 class ImageDataset(Dataset):
@@ -66,9 +77,11 @@ class ImageDataset(Dataset):
         data_dir: Path,
         limit: int|None = None,
         sort: bool = True,
+        aug_flip_lr: bool = False,
+        aug_flip_tb: bool = False,
     ):
         super().__init__()
-        import glob
+        
         self.data_dir = Path(data_dir)
         
         files = glob.glob(str(self.data_dir / '*.*'))
@@ -88,13 +101,21 @@ class ImageDataset(Dataset):
             tvt.ToTensor(),
             tvt.Normalize([0.5], [0.5])
         ])
+        
+        self.aug_flip_lr = aug_flip_lr
+        self.aug_flip_tb = aug_flip_tb
     
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, index):
         data = self.data[index]
-        return self.transform(Image.open(data).convert('RGB'))
+        tensor = self.transform(Image.open(data).convert('RGB'))
+        if self.aug_flip_lr and random.random() < 0.5:
+            tensor = tensor.flip(dim=-1)
+        if self.aug_flip_tb and random.random() < 0.5:
+            tensor = tensor.flip(dim=-2)
+        return tensor
 
 
 class VideoDataset(Dataset):
@@ -106,6 +127,8 @@ class VideoDataset(Dataset):
         ss: float|None = None,
         limit: int|None = None,
         sort: bool = False,
+        aug_flip_lr: bool = False,
+        aug_flip_tb: bool = False,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -124,6 +147,9 @@ class VideoDataset(Dataset):
         if 0 < (limit or 0):
             self.data = self.data[:limit]
         
+        self.aug_flip_lr = aug_flip_lr
+        self.aug_flip_tb = aug_flip_tb
+    
     def __len__(self):
         return len(self.data)
     
@@ -191,5 +217,10 @@ class VideoDataset(Dataset):
         
         frames = frames / 255
         frames = tvf.normalize(frames, [0.5], [0.5])
+        
+        if self.aug_flip_lr and random.random() < 0.5:
+            frames = frames.flip(dim=-1)
+        if self.aug_flip_tb and random.random() < 0.5:
+            frames = frames.flip(dim=-2)
         
         return frames
