@@ -185,6 +185,23 @@ class LaplacianLoss(Loss):
         return loss
 
 
+class GrayLaplacianLoss(LaplacianLoss):
+    name = 'graylaplacian'
+    def apply_laplacian(self, x, kernel):
+        # gray = 0.299R + 0.587G + 0.114B
+        if x.ndim == 3:
+            assert x.size(0) == 3
+            r, g, b = x  # (H, W)
+            x = r * 0.299 + g * 0.587 + b * 0.114
+            x = x[None]  # (1, H, W)
+        elif x.ndim == 4:
+            assert x.size(1) == 3
+            r, g, b = x.unbind(dim=1)  # (B, H, W)
+            x = r * 0.299 + g * 0.587 + b * 0.114
+            x = x.unsqueeze(dim=1)     # (B, 1, H, W)
+        return super().apply_laplacian(x, kernel)
+
+
 class GMLaplacianLoss(LaplacianLoss):
     name = 'gmlaplacian'
     def __call__(self, out: VAEOutput):
@@ -207,6 +224,23 @@ class GMLaplacianLoss(LaplacianLoss):
             gm_pred = target @ target.mT
             loss = normalized_l1(gm_pred, gm_target)
         return loss
+
+
+class GrayGMLaplacianLoass(GMLaplacianLoss):
+    name = 'graygmlaplacian'
+    def apply_laplacian(self, x, kernel):
+        # gray = 0.299R + 0.587G + 0.114B
+        if x.ndim == 3:
+            assert x.size(0) == 3
+            r, g, b = x  # (H, W)
+            x = r * 0.299 + g * 0.587 + b * 0.114
+            x = x[None]  # (1, H, W)
+        elif x.ndim == 4:
+            assert x.size(1) == 3
+            r, g, b = x.unbind(dim=1)  # (B, H, W)
+            x = r * 0.299 + g * 0.587 + b * 0.114
+            x = x.unsqueeze(dim=1)     # (B, 1, H, W)
+        return super().apply_laplacian(x, kernel)
 
 
 class LpipsLoss(Loss):
