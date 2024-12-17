@@ -29,8 +29,8 @@ class WaveletFID1d(WaveletFID):
         
         self._init_kernel('lo_d', lo_d, parameterize, max_level)
         self._init_kernel('hi_d', hi_d, parameterize, max_level)
-        self._init_kernel('lo_r', lo_r, parameterize, 0)
-        self._init_kernel('hi_r', hi_r, parameterize, 0)
+        self._init_kernel('lo_r', lo_r, False, 0)
+        self._init_kernel('hi_r', hi_r, False, 0)
     
     def init_filters(self):
         raise NotImplementedError()
