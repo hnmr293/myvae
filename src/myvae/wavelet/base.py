@@ -10,7 +10,7 @@ class WaveletBase(torch.nn.Module):
         super().__init__()
         self.name = name
     
-    def decomposition_filters(self) -> tuple[Tensor, Tensor]:
+    def decomposition_filters(self, level: int = 0) -> tuple[Tensor, Tensor]:
         """分解用フィルタを返す（低周波・高周波）"""
         raise NotImplementedError
         
@@ -33,28 +33,31 @@ def dwt2d(image: Tensor, wavelet: WaveletBase, level: int = 1) -> dict[str, Tens
     """
     if level < 1:
         raise ValueError(f'Level must be >= 1, but {level} is given.')
+    
+    def _dwt2d(image: Tensor, wavelet: WaveletBase, depth: int, max_depth: int):
+        # フィルタの取得
+        lo_d, hi_d = wavelet.decomposition_filters(depth)
         
-    # フィルタの取得
-    lo_d, hi_d = wavelet.decomposition_filters()
+        # x方向の変換
+        L = _apply_filter_1d_down(image, lo_d, -1, pad='right')
+        H = _apply_filter_1d_down(image, hi_d, -1, pad='right')
+        
+        # y方向の変換
+        LL = _apply_filter_1d_down(L, lo_d, -2, pad='right')
+        LH = _apply_filter_1d_down(L, hi_d, -2, pad='right')
+        HL = _apply_filter_1d_down(H, lo_d, -2, pad='right')
+        HH = _apply_filter_1d_down(H, hi_d, -2, pad='right')
+        
+        coeffs = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
+        
+        # 再帰的に分解
+        if depth + 1 < max_depth:
+            sub_coeffs = _dwt2d(LL, wavelet, depth + 1, max_depth)
+            coeffs['next'] = sub_coeffs
+        
+        return coeffs
     
-    # x方向の変換
-    L = _apply_filter_1d_down(image, lo_d, -1, pad='right')
-    H = _apply_filter_1d_down(image, hi_d, -1, pad='right')
-    
-    # y方向の変換
-    LL = _apply_filter_1d_down(L, lo_d, -2, pad='right')
-    LH = _apply_filter_1d_down(L, hi_d, -2, pad='right')
-    HL = _apply_filter_1d_down(H, lo_d, -2, pad='right')
-    HH = _apply_filter_1d_down(H, hi_d, -2, pad='right')
-    
-    coeffs = {'LL': LL, 'LH': LH, 'HL': HL, 'HH': HH}
-    
-    # 再帰的に分解
-    if level > 1:
-        sub_coeffs = dwt2d(LL, wavelet, level-1)
-        coeffs['next'] = sub_coeffs
-    
-    return coeffs
+    return _dwt2d(image, wavelet, 0, level)
 
 
 def idwt2d(coeffs: dict[str, Tensor], wavelet: WaveletBase) -> Tensor:
@@ -112,43 +115,46 @@ def dwt3d(images: Tensor, wavelet: WaveletBase, level: int = 1) -> dict[str, Ten
     if images.ndim < 3:
         raise ValueError(f'images.ndim must be 3 or greater, but {images.ndim} is given.')
     
-    # フィルタの取得
-    lo_d, hi_d = wavelet.decomposition_filters()
+    def _dwt3d(images: Tensor, wavelet: WaveletBase, depth: int, max_depth: int):
+        # フィルタの取得
+        lo_d, hi_d = wavelet.decomposition_filters(depth)
+        
+        # x方向の変換
+        L, H = [
+            _apply_filter_1d_down(images, d, -1, pad='right')
+            for d in (lo_d, hi_d)
+        ]
+        
+        # y方向の変換
+        LL, LH, HL, HH = [
+            _apply_filter_1d_down(image, d, -2, pad='right')
+            for image, d in product((L, H), (lo_d, hi_d))
+        ]
+        
+        # t方向の変換
+        (
+            LLL, HLL,
+            LLH, HLH,
+            LHL, HHL,
+            LHH, HHH,
+        ) = [
+            _apply_filter_1d_down(image, d, -3, pad='right')
+            for image, d in product((LL, LH, HL, HH), (lo_d, hi_d))
+        ]
+        
+        coeffs = {
+            'LLL': LLL, 'LLH': LLH, 'LHL': LHL, 'LHH': LHH,
+            'HLL': HLL, 'HLH': HLH, 'HHL': HHL, 'HHH': HHH,
+        }
+        
+        # 再帰的な分解
+        if depth + 1 < max_depth:
+            sub_coeffs = _dwt3d(LLL, wavelet, depth + 1, max_depth)
+            coeffs['next'] = sub_coeffs
+        
+        return coeffs
     
-    # x方向の変換
-    L, H = [
-        _apply_filter_1d_down(images, d, -1, pad='right')
-        for d in (lo_d, hi_d)
-    ]
-    
-    # y方向の変換
-    LL, LH, HL, HH = [
-        _apply_filter_1d_down(image, d, -2, pad='right')
-        for image, d in product((L, H), (lo_d, hi_d))
-    ]
-    
-    # t方向の変換
-    (
-        LLL, HLL,
-        LLH, HLH,
-        LHL, HHL,
-        LHH, HHH,
-    ) = [
-        _apply_filter_1d_down(image, d, -3, pad='right')
-        for image, d in product((LL, LH, HL, HH), (lo_d, hi_d))
-    ]
-    
-    coeffs = {
-        'LLL': LLL, 'LLH': LLH, 'LHL': LHL, 'LHH': LHH,
-        'HLL': HLL, 'HLH': HLH, 'HHL': HHL, 'HHH': HHH,
-    }
-    
-    # 再帰的な分解
-    if level > 1:
-        sub_coeffs = dwt3d(LLL, wavelet, level-1)
-        coeffs['next'] = sub_coeffs
-    
-    return coeffs
+    return _dwt3d(images, wavelet, 0, level)
 
 
 def idwt3d(coeffs: dict[str, Tensor], wavelet: WaveletBase) -> Tensor:
@@ -207,7 +213,16 @@ def _apply_filter_1d(data: Tensor, filter: Tensor, dim: int, pad: str = 'right')
         pads = pads[:3]
     pads = [x for xs in pads for x in xs]
     
+    orig_ndim = data.ndim
+    
+    # バッチ次元が必要
+    if orig_ndim == 2 or orig_ndim == 3:
+        data = data[None]
+    
     data = tf.pad(data, pads, mode='reflect')
+    
+    if orig_ndim == 2 or orig_ndim == 3:
+        data = data[0]
     
     unfold = data.unfold(dim, size=filter.size(0), step=1)
     

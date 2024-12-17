@@ -373,16 +373,11 @@ def load_model(path: str|Path, init):
     metadata = sd.pop('config')
     
     from myvae.train import parse_dict
+    from myvae.train.utils import restore_states
     
     conf = parse_dict(metadata, without_data=True)
     
-    sd_ = sd['state_dict']
-    # remove compile wrapper
-    sd_ = {k.replace('_orig_mod.', ''): v for k, v in sd_.items()}
-    
-    init.model.load_state_dict(sd_)
-    init.train.optimizer.load_state_dict(sd['optimizer'])
-    init.train.scheduler.load_state_dict(sd['scheduler'])
+    restore_states(init.model, init.train.optimizer, init.train.scheduler, sd)
     
     return conf, metadata
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 
 import torch
 import torch.nn as nn
@@ -6,7 +7,7 @@ import torch.nn as nn
 from .configs import VAEConfig, EncoderConfig, DecoderConfig
 from .encoder import Encoder, Encoder3D, Encoder3DWavelet
 from .decoder import Decoder, Decoder3D
-from ..wavelet import dwt3d, idwt3d, HaarWavelet
+from ..wavelet import dwt3d, idwt3d, HaarWavelet, Daubechies4Wavelet, ComplexDualTreeWavelet
 
 
 @dataclass
@@ -163,12 +164,33 @@ class VAE3D(nn.Module):
         return self
 
 
+def _get_wavelet(config: EncoderConfig, max_level: int):
+    wavelet_type = config.wavelet_type
+    if wavelet_type is None:
+        logging.warning('wavelet_type is None; use "haar" instead')
+        wavelet_type = 'haar'
+    
+    param = config.wavelet_parameterized
+    max_level = len(config.layer_out_dims) - 2
+    
+    if wavelet_type == 'haar':
+        return HaarWavelet(param, max_level)
+    
+    if wavelet_type == 'daubechies4':
+        return Daubechies4Wavelet(param, max_level)
+    
+    if wavelet_type == 'complexdualtree':
+        return ComplexDualTreeWavelet(param, max_level)
+    
+    raise RuntimeError(f'unknown wavelet type: {wavelet_type}')
+
+
 class VAE3DWavelet(nn.Module):
     def __init__(self, config: VAEConfig):
         super().__init__()
-        self.wavelet = HaarWavelet()
         self.encoder = Encoder3DWavelet(config.encoder)
         self.decoder = Decoder3D(config.decoder)
+        self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
     
     @property
     def dtype(self):

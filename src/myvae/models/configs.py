@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,8 @@ class EncoderConfig:
     num_mid_attns: int = 1
     attention: AttentionConfig = field(default_factory=AttentionConfig)
     dropout: float = 0.0
+    wavelet_type: Literal['haar', 'daubechies4', 'complexdualtree'] | None = None
+    wavelet_parameterized: bool = False
     
     def __post_init__(self):
         if any(d % self.num_groups != 0 for d in self.layer_out_dims):
