@@ -1,7 +1,10 @@
 import torch
 from torch import nn, Tensor
+import torch.nn.functional as tf
+from torchvision.utils import make_grid as tv_make_grid
+import einops
 
-from myvae import VAE, VAE3D, VAE3DWavelet
+from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
 
 
 def restore_states(
@@ -93,3 +96,61 @@ def restore_scheduler_state(
     state_dict: dict,
 ):
     return scheduler.load_state_dict(state_dict)
+
+
+def gather_images(outputs: list[VAEOutput]):
+    """入力画像を表すテンソルと出力画像を表すテンソル、差の絶対値を表すテンソルを、全画像のサイズ（＋フレーム数）をクロップにより揃えたうえで返す"""
+    input_images = []
+    generated_images = []
+    for output in outputs:
+        inp_image = (output.input * 0.5 + 0.5).clamp(0, 1)
+        input_images.extend(inp_image)
+        gen_image = (output.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
+        generated_images.extend(gen_image)
+    
+    if len(input_images) == 0:
+        return None, None, None
+    
+    width = min(t.size(-1) for t in input_images)
+    height = min(t.size(-2) for t in input_images)
+    
+    if input_images[0].ndim == 3:
+        # 2D VAE
+        input_images = torch.stack([t[..., :height, :width] for t in input_images])
+        generated_images = torch.stack([t[..., :height, :width] for t in generated_images])
+        diff = (input_images - generated_images).abs()
+    else:
+        # 3D VAE
+        assert input_images[0].ndim == 4
+        frames = max(t.size(0) for t in input_images)
+        input_images = torch.stack([
+            t[:frames, :, :height, :width] if frames <= t.size(0)
+            else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
+            for t in input_images
+        ])
+        generated_images = torch.stack([
+            t[:frames, :, :height, :width] if frames <= t.size(0)
+            else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
+            for t in generated_images
+        ])
+        diff = (input_images - generated_images).abs()
+        ## (b f c h w) -> (b c h (f w))
+        #input_images = einops.rearrange(input_images, 'b f c h w -> b c h (f w)')
+        #generated_images = einops.rearrange(generated_images, 'b f c h w -> b c h (f w)')
+    
+    return input_images, generated_images, diff
+
+def make_grid(images: Tensor):
+    """画像をいい感じに横に並べる"""
+    if images.ndim == 4:
+        # 2D VAE
+        # (b, c, h, w)
+        nrow = (images.size(0) ** 0.5).__ceil__()
+        images = tv_make_grid(images, nrow=nrow)
+    else:
+        # 3D VAE
+        # (b, f, c, h, w)
+        images = einops.rearrange(images, 'b f c h w -> b c h (f w)')
+        images = tv_make_grid(images, nrow=1)
+    
+    return images

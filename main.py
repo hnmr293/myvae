@@ -5,11 +5,8 @@ from typing import Callable, Any
 
 import numpy as np
 import torch
-import torch.nn.functional as tf
 from torch.utils.data import DataLoader
 import torchvision.transforms.functional as tvf
-from torchvision.utils import make_grid
-import einops
 from accelerate import Accelerator
 from accelerate.utils import tqdm, gather_object, TorchDynamoPlugin
 import wandb
@@ -17,6 +14,7 @@ import wandb
 from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
 from myvae.train import TrainConf
 import myvae.train.loss as losses
+from myvae.train.utils import gather_images, make_grid
 from myvae.train.metrics import psnr, ssim
 
 
@@ -301,52 +299,14 @@ def validate(
                 **val_extra_losses,
             }, step=global_steps)
             
-            # create images
-            input_images = []
-            generated_images = []
-            for val_result in val_results:
-                inp_image = (val_result.input * 0.5 + 0.5).clamp(0, 1)
-                input_images.extend(inp_image)
-                gen_image = (val_result.decoder_output.value * 0.5 + 0.5).clamp(0, 1)
-                generated_images.extend(gen_image)
+            # 画像をいい感じに横に並べる
+            image_in, image_out, diff = gather_images(val_results)
+            image_in = make_grid(image_in)
+            image_out = make_grid(image_out)
+            diff = make_grid(diff)
             
-            width = min(t.size(-1) for t in input_images)
-            height = min(t.size(-2) for t in input_images)
-            
-            if input_images[0].ndim == 3:
-                # 2D VAE
-                input_images = torch.stack([t[..., :height, :width] for t in input_images])
-                generated_images = torch.stack([t[..., :height, :width] for t in generated_images])
-                
-                nrow = (len(input_images) ** 0.5).__ceil__()
-                image_left = make_grid(input_images, nrow=nrow)
-                image_right = make_grid(generated_images, nrow=nrow)
-                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
-                diff = (input_images - generated_images).abs()
-                image_diff = tvf.to_pil_image(make_grid(diff, nrow=nrow))
-            else:
-                # 3D VAE
-                assert input_images[0].ndim == 4
-                frames = max(t.size(0) for t in input_images)
-                input_images = torch.stack([
-                    t[:frames, :, :height, :width] if frames <= t.size(0)
-                    else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
-                    for t in input_images
-                ])
-                generated_images = torch.stack([
-                    t[:frames, :, :height, :width] if frames <= t.size(0)
-                    else tf.pad(t[:, :, :height, :width], (0, 0, 0, 0, 0, 0, 0, frames - t.size(0)), mode='constant', value=0)
-                    for t in generated_images
-                ])
-                # (b f c h w) -> (b c h (f w))
-                input_images = einops.rearrange(input_images, 'b f c h w -> b c h (f w)')
-                generated_images = einops.rearrange(generated_images, 'b f c h w -> b c h (f w)')
-                
-                image_left = make_grid(input_images, nrow=1)
-                image_right = make_grid(generated_images, nrow=1)
-                image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
-                diff = (input_images - generated_images).abs()
-                image_diff = tvf.to_pil_image(make_grid(diff, nrow=1))
+            image = tvf.to_pil_image(torch.cat([image_in, image_out], dim=-1))
+            image_diff = tvf.to_pil_image(diff)
             
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],
@@ -354,8 +314,8 @@ def validate(
             }, step=global_steps)
             
             # compute metrics
-            val_psnr = psnr(input_images, generated_images)
-            val_ssim = ssim(tvf.rgb_to_grayscale(input_images), tvf.rgb_to_grayscale(generated_images), reduction='none')
+            val_psnr = psnr(image_in, image_out)
+            val_ssim = ssim(tvf.rgb_to_grayscale(image_in), tvf.rgb_to_grayscale(image_out), reduction='none')
             val_ssim_hist = np.histogram(val_ssim.reshape(-1).cpu().float(), bins=256, range=(-1, 1), density=True)
             acc.get_tracker('wandb').log({
                 'val/psnr': torch.mean(val_psnr).item(),
