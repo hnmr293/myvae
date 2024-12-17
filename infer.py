@@ -52,7 +52,7 @@ def load_model(path: Path):
     return model
 
 
-def iter_images(path: Path) -> Iterator[Image.Image]:
+def iter_images(path: Path) -> Iterator[tuple[Path, Image.Image]]:
     assert path.exists()
     
     if path.is_dir():
@@ -73,7 +73,7 @@ def iter_images(path: Path) -> Iterator[Image.Image]:
         except:
             print(f'fail to load image: {file}', file=sys.stderr)
             continue
-        yield img
+        yield file, img
 
 
 def crop(img: Image.Image, r: int):
@@ -101,6 +101,17 @@ def main():
     import torch.nn.functional as tf
     from torchvision.transforms.functional import to_tensor, normalize, to_pil_image
     
+    def calc_psnr(img1: torch.Tensor, img2: torch.Tensor):
+        while img1.ndim < 4: img1 = img1[None]
+        while img2.ndim < 4: img2 = img2[None]
+        width = min(img1.size(-1), img2.size(-1))
+        height = min(img1.size(-2), img2.size(-2))
+        img1 = img1[..., :height, :width]
+        img2 = img2[..., :height, :width]
+        from myvae.train.metrics import psnr
+        result = psnr(img1, img2)
+        return result
+    
     with torch.inference_mode():
         dtype = getattr(torch, args.dtype)
         device = torch.device(args.device)
@@ -109,7 +120,7 @@ def main():
         model = load_model(args.MODEL).to(dtype=dtype, device=device)
         r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)  # 縮小率
         
-        for i, img in enumerate(iter_images(args.IMAGE_OR_IMAGEDIR)):
+        for i, (filepath, img) in enumerate(iter_images(args.IMAGE_OR_IMAGEDIR)):
             if args.crop:
                 img = crop(img, r)
             
@@ -122,6 +133,8 @@ def main():
             
             gen_t = out.decoder_output.value[0]
             gen_t = (gen_t * 0.5 + 0.5).clamp(0, 1)
+            
+            psnr = calc_psnr(t, out.decoder_output.value).item()
             
             if t.shape != gen_t.shape:
                 t_pad_x = 0
@@ -149,6 +162,8 @@ def main():
             
             img = to_pil_image(img)
             img.save(f'{i:05d}.png')
+            
+            print(f'{filepath} PSNR = {psnr:.1f}')
 
 
 if __name__ == '__main__':
