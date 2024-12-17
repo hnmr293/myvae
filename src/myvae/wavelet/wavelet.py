@@ -56,7 +56,7 @@ class WaveletFID1d(WaveletFID):
             buffer.copy_(kernel)
 
     def decomposition_filters(self, level: int = 0):
-        if 0 < self.max_level:
+        if self.parameterized and 0 < self.max_level:
             if self.max_level <= level:
                 raise RuntimeError(f'level must be less than {self.max_level}')
             lo = self.lo_d[level]
