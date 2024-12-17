@@ -16,6 +16,7 @@ def parse_args():
     p.add_argument('--seed', type=int, default=-1)
     p.add_argument('--crop', action='store_true')
     p.add_argument('--diff', action='store_true')
+    p.add_argument('--max_frames', type=int, default=8)
     
     args = p.parse_args()
     
@@ -76,6 +77,27 @@ def iter_images(path: Path) -> Iterator[tuple[Path, Image.Image]]:
         yield file, img
 
 
+def iter_videos(path: Path, max_frames: int) -> Iterator[tuple[Path, list[Image.Image]]]:
+    assert path.exists()
+    
+    if not path.is_dir():
+        raise RuntimeError(f'path must be directory: {path}')
+    
+    import glob, natsort
+    dirs = natsort.natsorted([p for p in path.glob('*/') if p.is_dir()])
+    
+    for dir in dirs:
+        imgs = sorted([
+            p for p in dir.glob('*.*')
+            if p.suffix in ('.jpg', '.jpeg', '.png', '.webp')
+        ])
+        imgs = [
+            Image.open(file).convert('RGB')
+            for file in imgs
+        ]
+        yield dir, imgs[:max_frames]
+
+
 def crop(img: Image.Image, r: int):
     assert r & (r - 1) == 0, f'r must be power of 2, but {r} given'
     W, H = img.size
@@ -100,6 +122,8 @@ def main():
     import torch
     import torch.nn.functional as tf
     from torchvision.transforms.functional import to_tensor, normalize, to_pil_image
+    import einops
+    from myvae import VAE, VAE3D, VAE3DWavelet
     
     def calc_psnr(img1: torch.Tensor, img2: torch.Tensor):
         while img1.ndim < 4: img1 = img1[None]
@@ -120,11 +144,24 @@ def main():
         model = load_model(args.MODEL).to(dtype=dtype, device=device)
         r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)  # 縮小率
         
-        for i, (filepath, img) in enumerate(iter_images(args.IMAGE_OR_IMAGEDIR)):
+        is_3d = isinstance(model, (VAE3D, VAE3DWavelet))
+        
+        if is_3d:
+            iterator = iter_videos(args.IMAGE_OR_IMAGEDIR, args.max_frames)
+        else:
+            iterator = iter_images(args.IMAGE_OR_IMAGEDIR)
+        
+        for i, (filepath, img) in enumerate(iterator):
             if args.crop:
-                img = crop(img, r)
+                if is_3d:
+                    img = [crop(im, r) for im in img]
+                else:
+                    img = crop(img, r)
             
-            t0 = to_tensor(img)
+            if is_3d:
+                t0 = torch.stack([to_tensor(im) for im in img])
+            else:
+                t0 = to_tensor(img)
             t = normalize(t0, [0.5], [0.5])
             t = t.to(dtype=dtype, device=device)
             
@@ -134,7 +171,7 @@ def main():
             gen_t = out.decoder_output.value[0]
             gen_t = (gen_t * 0.5 + 0.5).clamp(0, 1)
             
-            psnr = calc_psnr(t, out.decoder_output.value).item()
+            psnr = calc_psnr(t[None], out.decoder_output.value).item()
             
             if t.shape != gen_t.shape:
                 t_pad_x = 0
@@ -154,11 +191,17 @@ def main():
             
             gen_t = gen_t.cpu()
             
+            if is_3d:
+                t0 = einops.rearrange(t0, 'f c h w -> c h (f w)')
+                gen_t = einops.rearrange(gen_t, 'f c h w -> c h (f w)')
+            
+            cat_dim = -2 if is_3d else -1  # 2Dなら横、3Dなら縦に並べる
+            
             if args.diff:
                 diff = (t0 - gen_t).abs()
-                img = torch.cat((t0, gen_t, diff), dim=-1)
+                img = torch.cat((t0, gen_t, diff), dim=cat_dim)
             else:
-                img = torch.cat((t0, gen_t), dim=-1)
+                img = torch.cat((t0, gen_t), dim=cat_dim)
             
             img = to_pil_image(img)
             img.save(f'{i:05d}.png')
