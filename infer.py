@@ -37,7 +37,7 @@ def load_model(path: Path):
             'class_path': 'myvae.VAE',
             'init_args': conf['model'],
         }
-    init = parse_dict(conf, only_model=True)
+    init = parse_dict(conf, only_model=True, without_data=True)
     model = init.model
     assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
     

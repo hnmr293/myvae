@@ -374,7 +374,7 @@ def load_model(path: str|Path, init):
     
     from myvae.train import parse_dict
     
-    conf = parse_dict(metadata)
+    conf = parse_dict(metadata, without_data=True)
     
     sd_ = sd['state_dict']
     # remove compile wrapper
