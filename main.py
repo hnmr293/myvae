@@ -322,6 +322,8 @@ def validate(
                 image_left = make_grid(input_images, nrow=nrow)
                 image_right = make_grid(generated_images, nrow=nrow)
                 image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+                diff = (input_images - generated_images).abs()
+                image_diff = tvf.to_pil_image(make_grid(diff, nrow=nrow))
             else:
                 # 3D VAE
                 assert input_images[0].ndim == 4
@@ -343,9 +345,12 @@ def validate(
                 image_left = make_grid(input_images, nrow=1)
                 image_right = make_grid(generated_images, nrow=1)
                 image = tvf.to_pil_image(torch.cat([image_left, image_right], dim=-1))
+                diff = (input_images - generated_images).abs()
+                image_diff = tvf.to_pil_image(make_grid(diff, nrow=1))
             
             acc.get_tracker('wandb').log({
                 'val/image': [wandb.Image(image)],
+                'val/image/diff': [wandb.Image(image_diff)],
             }, step=global_steps)
             
             # compute metrics
