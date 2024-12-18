@@ -122,7 +122,7 @@ class VAE(VAEBase):
     
     def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
-        z_mean, z_logvar = z.chunk(2, dim=1)
+        z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
     
     def decode(self, z: Tensor) -> DecoderOutput:
