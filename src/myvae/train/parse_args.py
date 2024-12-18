@@ -116,6 +116,7 @@ def create_parser(only_model: bool = False, without_data: bool = False):
             p.add_argument('--dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
             p.add_argument('--val_dataloader', type=Callable[[torch.utils.data.Dataset, int], torch.utils.data.DataLoader])
     p.add_argument('--model', type=torch.nn.Module)
+    p.add_argument('--watchdog', type=str, default=None)
     return p
 
 

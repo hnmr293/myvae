@@ -18,6 +18,7 @@ import myvae.train.loss as losses
 from myvae.train.utils import gather_images, make_grid
 from myvae.train.metrics import psnr, ssim
 from myvae.train.dataset_filters import Filters
+from myvae.train.watchdog import Watchdog
 
 
 class ModelSaver:
@@ -155,6 +156,7 @@ def train(
     train_conf: TrainConf,
     compile_options: dict[str, Any]|None,
     saver: ModelSaver,
+    watchdog: Watchdog|None,
 ):
     global_steps = 0
     
@@ -217,6 +219,9 @@ def train(
                 global_steps += 1
             
         # epoch end
+        
+        if watchdog:
+            watchdog.notify1()
         
         acc.log({
             'epoch': epoch,
@@ -443,12 +448,30 @@ def run_train(init, conf_dict):
         print('  Training Setting')
         print('=' * 80)
         pprint.pprint(conf_dict)
+        
+    watchdog = None
+    if init.watchdog:
+        if acc.is_main_process:
+            # watchdog について
+            #   --watchdog で指定した python プログラムを、このプログラムの PID を引数として起動する
+            #   起動したプログラムに対して、学習中のイベント発生時に以下のシグナルを送る
+            #   | event       | signal  |
+            #   | ----------- | ------- |
+            #   | epoch end   | SIGUSR1 |
+            import os
+            watchdog = Watchdog(init.watchdog, [os.getpid()])
     
     try:
-        train(acc, model, data, val_data, train_conf, compile_options, saver)
+        train(acc, model, data, val_data, train_conf, compile_options, saver, watchdog)
+    except:
+        if watchdog:
+            watchdog.notify2()
+        raise
     finally:
         acc.end_training()
         saver.close()
+        if watchdog:
+            watchdog.close()
 
 
 def main():
