@@ -9,7 +9,56 @@ from .up import DecoderBlock, DecoderBlock3D
 from .mid import MidBlock, MidBlock3D
 
 
-class Decoder(nn.Module):
+class DecoderBase(nn.Module):
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+
+class BottleneckDecoderBase(DecoderBase):
+    """
+    ボトルネック型VAEのデコーダの基本実装
+    子クラスで
+    - mid_blocks: nn.ModuleList
+    - up_blocks: nn.ModuleList
+    を定義すること
+    """
+    
+    mid_blocks: nn.ModuleList
+    up_blocks: nn.ModuleList
+    
+    @property
+    def _up_blocks(self):
+        """Gradient checkpointing を考慮してモジュールを取得する"""
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.up_blocks
+            ]
+        else:
+            return self.up_blocks
+    
+    @property
+    def _mid_blocks(self):
+        """Gradient checkpointing を考慮してモジュールを取得する"""
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.mid_blocks
+            ]
+        else:
+            return self.mid_blocks
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        self.gradient_checkpointing = enabled
+        return self
+
+
+class Decoder(BottleneckDecoderBase):
     def __init__(self, config: DecoderConfig):
         super().__init__()
         self.config = config
@@ -34,34 +83,6 @@ class Decoder(nn.Module):
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
-    def _up_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.up_blocks
-            ]
-        else:
-            return self.up_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
-    
     def forward(self, z: Tensor) -> Tensor:
         x = z
         
@@ -78,13 +99,9 @@ class Decoder(nn.Module):
         x = self.conv_out(x)
         
         return x
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self
 
 
-class Decoder3D(nn.Module):
+class Decoder3D(BottleneckDecoderBase):
     def __init__(self, config: DecoderConfig):
         super().__init__()
         self.config = config
@@ -113,34 +130,6 @@ class Decoder3D(nn.Module):
         self.norm_out = nn.GroupNorm(config.num_groups, config.layer_out_dims[-1], eps=config.norm_eps)
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
-    
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
-    def _up_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.up_blocks
-            ]
-        else:
-            return self.up_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
     
     def forward(self, z: Tensor) -> Tensor:
         x = z
@@ -176,7 +165,3 @@ class Decoder3D(nn.Module):
         x = x.view(*shape[:2], -1, *shape[3:])
         
         return x
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self

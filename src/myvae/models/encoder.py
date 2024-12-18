@@ -1,4 +1,5 @@
 import functools
+from abc import ABC, abstractmethod
 
 import torch
 from torch import nn, Tensor
@@ -10,7 +11,56 @@ from .down import EncoderBlock, EncoderBlock3D
 from .mid import MidBlock, MidBlock3D
 
 
-class Encoder(nn.Module):
+class EncoderBase(nn.Module):
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+    
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+
+class BottleneckEncoderBase(EncoderBase):
+    """
+    ボトルネック型VAEのエンコーダの基本実装
+    子クラスで
+    - down_blocks: nn.ModuleList
+    - mid_blocks: nn.ModuleList
+    を定義すること
+    """
+    
+    down_blocks: nn.ModuleList
+    mid_blocks: nn.ModuleList
+    
+    @property
+    def _down_blocks(self):
+        """Gradient checkpointing を考慮してモジュールを取得する"""
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.down_blocks
+            ]
+        else:
+            return self.down_blocks
+    
+    @property
+    def _mid_blocks(self):
+        """Gradient checkpointing を考慮してモジュールを取得する"""
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.mid_blocks
+            ]
+        else:
+            return self.mid_blocks
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        self.gradient_checkpointing = enabled
+        return self
+
+
+class Encoder(BottleneckEncoderBase):
     def __init__(self, config: EncoderConfig):
         super().__init__()
         
@@ -37,34 +87,6 @@ class Encoder(nn.Module):
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
-    def _down_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.down_blocks
-            ]
-        else:
-            return self.down_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
-    
     def forward(self, x: Tensor) -> Tensor:
         z = x
         
@@ -81,13 +103,9 @@ class Encoder(nn.Module):
         z = self.conv_out(z)
         
         return z
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self
 
 
-class Encoder3D(nn.Module):
+class Encoder3D(BottleneckEncoderBase):
     def __init__(self, config: EncoderConfig):
         super().__init__()
         
@@ -117,34 +135,6 @@ class Encoder3D(nn.Module):
         self.norm_out = nn.GroupNorm(config.num_groups, config.layer_out_dims[-1], eps=config.norm_eps)
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
-    
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
-    def _down_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.down_blocks
-            ]
-        else:
-            return self.down_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
     
     def forward(self, x: Tensor) -> Tensor:
         z = x
@@ -180,13 +170,38 @@ class Encoder3D(nn.Module):
         z = z.view(*shape[:2], -1, *shape[3:])
         
         return z
+
+
+class BottleneckEncoderWaveletBase(ABC, BottleneckEncoderBase):
+    """
+    ボトルネック型VAEのエンコーダの基本実装
+    子クラスで
+    - dwt_blocks: nn.ModuleList
+    - down_blocks: nn.ModuleList
+    - mid_blocks: nn.ModuleList
+    を定義すること
+    """
     
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self
+    dwt_blocks: nn.ModuleList
+    
+    @property
+    @abstractmethod
+    def level(self) -> int:
+        """このモデルが必要とするウェーブレット変換の深さ"""
+        pass
+    
+    @property
+    def _dwt_blocks(self):
+        if self.training and getattr(self, 'gradient_checkpointing', False):
+            return [
+                functools.partial(checkpoint, mod, use_reentrant=False)
+                for mod in self.dwt_blocks
+            ]
+        else:
+            return self.dwt_blocks
 
 
-class EncoderWavelet(nn.Module):
+class EncoderWavelet(BottleneckEncoderWaveletBase):
     def __init__(self, config: EncoderConfig):
         super().__init__()
         
@@ -229,46 +244,8 @@ class EncoderWavelet(nn.Module):
         self.conv_out = nn.Conv2d(last_dim, config.out_dim, kernel_size=3, padding=1)
     
     @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
     def level(self):
         return len(self.down_blocks) - 1
-    
-    @property
-    def _down_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.down_blocks
-            ]
-        else:
-            return self.down_blocks
-    
-    @property
-    def _dwt_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.dwt_blocks
-            ]
-        else:
-            return self.dwt_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
     
     def forward(self, x: Tensor, dwts: list[Tensor]) -> Tensor:
         assert len(dwts) == self.level
@@ -295,13 +272,9 @@ class EncoderWavelet(nn.Module):
         z = self.conv_out(z)
         
         return z
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self
 
 
-class Encoder3DWavelet(nn.Module):
+class Encoder3DWavelet(BottleneckEncoderWaveletBase):
     def __init__(self, config: EncoderConfig):
         super().__init__()
         
@@ -344,46 +317,8 @@ class Encoder3DWavelet(nn.Module):
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
     @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
-    
-    @property
     def level(self):
         return len(self.down_blocks) - 2
-    
-    @property
-    def _down_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.down_blocks
-            ]
-        else:
-            return self.down_blocks
-    
-    @property
-    def _dwt_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.dwt_blocks
-            ]
-        else:
-            return self.dwt_blocks
-    
-    @property
-    def _mid_blocks(self):
-        if self.training and getattr(self, 'gradient_checkpointing', False):
-            return [
-                functools.partial(checkpoint, mod, use_reentrant=False)
-                for mod in self.mid_blocks
-            ]
-        else:
-            return self.mid_blocks
     
     def forward(self, x: Tensor, dwts: list[Tensor]) -> Tensor:
         assert len(dwts) == self.level
@@ -430,10 +365,6 @@ class Encoder3DWavelet(nn.Module):
         z = z.view(*shape[:2], -1, *shape[3:])
         
         return z
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.gradient_checkpointing = enabled
-        return self
 
 
 class WaveletBlock(nn.Module):
