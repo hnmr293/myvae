@@ -74,6 +74,21 @@ class FlipFrames(Base):
         return x
 
 @dataclass
+class FixCrop(Base):
+    """指定されたサイズで画像の左上から切り出す"""
+    size: tuple[int, int]
+    def expects(self, x):
+        assert 2 <= x.ndim
+        h, w = x.shape[-2:]
+        assert self.size[0] <= w
+        assert self.size[1] <= h
+    def ensure(self, x):
+        assert x.size(-1) == self.size[0], f'{self.size}, {x.shape}'
+        assert x.size(-2) == self.size[1], f'{self.size}, {x.shape}'
+    def process(self, x):
+        return x[..., :self.size[1], :self.size[0]]
+
+@dataclass
 class RandomCrop(Base):
     """指定されたサイズでランダムに切り出す"""
     size: tuple[int, int]
