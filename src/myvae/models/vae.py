@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 import logging
 
 import torch
@@ -72,12 +73,7 @@ class VAEOutput:
         return VAEOutput(self.input.to(*args, **kwargs), self.encoder_output.to(*args, **kwargs), self.decoder_output.to(*args, **kwargs))
 
 
-class VAE(nn.Module):
-    def __init__(self, config: VAEConfig):
-        super().__init__()
-        self.encoder = Encoder(config.encoder)
-        self.decoder = Decoder(config.decoder)
-    
+class VAEBase(ABC, nn.Module):
     @property
     def dtype(self):
         return next(self.parameters()).dtype
@@ -85,6 +81,44 @@ class VAE(nn.Module):
     @property
     def device(self):
         return next(self.parameters()).device
+    
+    @abstractmethod
+    def encode(self, x: Tensor) -> EncoderOutput:
+        pass
+    
+    @abstractmethod
+    def decode(self, z: Tensor) -> DecoderOutput:
+        pass
+    
+    def forward(
+        self,
+        x: Tensor,
+        det: bool = False,
+        rng: torch.Generator|None = None,
+    ) -> VAEOutput:
+        encoded = self.encode(x)
+        
+        if det:
+            z = encoded.mean
+        else:
+            z = encoded.sample(rng)
+        
+        y = self.decode(z)
+        
+        return VAEOutput(x, encoded, y)
+    
+    def apply_gradient_checkpointing(self, enabled: bool = True):
+        for child in self.children():
+            if hasattr(child, 'apply_gradient_checkpointing'):
+                child.apply_gradient_checkpointing(enabled)
+        return self
+
+
+class VAE(VAEBase):
+    def __init__(self, config: VAEConfig):
+        super().__init__()
+        self.encoder = Encoder(config.encoder)
+        self.decoder = Decoder(config.decoder)
     
     def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
@@ -94,43 +128,13 @@ class VAE(nn.Module):
     def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
-    
-    def forward(
-        self,
-        x: Tensor,
-        det: bool = False,
-        rng: torch.Generator|None = None
-    ) -> VAEOutput:
-        encoded = self.encode(x)
-        
-        if det:
-            z = encoded.mean
-        else:
-            z = encoded.sample(rng)
-        
-        y = self.decode(z)
-        
-        return VAEOutput(x, encoded, y)
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.encoder.apply_gradient_checkpointing(enabled)
-        self.decoder.apply_gradient_checkpointing(enabled)
-        return self
 
 
-class VAE3D(nn.Module):
+class VAE3D(VAEBase):
     def __init__(self, config: VAEConfig):
         super().__init__()
         self.encoder = Encoder3D(config.encoder)
         self.decoder = Decoder3D(config.decoder)
-    
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
     
     def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
@@ -140,28 +144,6 @@ class VAE3D(nn.Module):
     def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
-    
-    def forward(
-        self,
-        x: Tensor,
-        det: bool = False,
-        rng: torch.Generator|None = None
-    ) -> VAEOutput:
-        encoded = self.encode(x)
-        
-        if det:
-            z = encoded.mean
-        else:
-            z = encoded.sample(rng)
-        
-        y = self.decode(z)
-        
-        return VAEOutput(x, encoded, y)
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.encoder.apply_gradient_checkpointing(enabled)
-        self.decoder.apply_gradient_checkpointing(enabled)
-        return self
 
 
 def _get_wavelet(config: EncoderConfig, max_level: int):
@@ -185,20 +167,12 @@ def _get_wavelet(config: EncoderConfig, max_level: int):
     raise RuntimeError(f'unknown wavelet type: {wavelet_type}')
 
 
-class VAE3DWavelet(nn.Module):
+class VAE3DWavelet(VAEBase):
     def __init__(self, config: VAEConfig):
         super().__init__()
         self.encoder = Encoder3DWavelet(config.encoder)
         self.decoder = Decoder3D(config.decoder)
         self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
-    
-    @property
-    def dtype(self):
-        return next(self.parameters()).dtype
-    
-    @property
-    def device(self):
-        return next(self.parameters()).device
     
     def get_dwt(self, x: Tensor) -> list[Tensor]:
         # x := (b, f, c, h, w)
@@ -233,25 +207,3 @@ class VAE3DWavelet(nn.Module):
     def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
-    
-    def forward(
-        self,
-        x: Tensor,
-        det: bool = False,
-        rng: torch.Generator|None = None
-    ) -> VAEOutput:
-        encoded = self.encode(x)
-        
-        if det:
-            z = encoded.mean
-        else:
-            z = encoded.sample(rng)
-        
-        y = self.decode(z)
-        
-        return VAEOutput(x, encoded, y)
-    
-    def apply_gradient_checkpointing(self, enabled: bool = True):
-        self.encoder.apply_gradient_checkpointing(enabled)
-        self.decoder.apply_gradient_checkpointing(enabled)
-        return self
