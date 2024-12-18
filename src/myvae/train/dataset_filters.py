@@ -96,6 +96,9 @@ class RandomCrop(Base):
 @dataclass
 class ResizeBase(Base):
     def save_resize(self, x: Tensor, factor: float, mode: str) -> Tensor:
+        if factor == 1.0:
+            return x
+        
         # tf.interpolate needs batch dim
         orig_ndim = x.ndim
         if orig_ndim == 3:
