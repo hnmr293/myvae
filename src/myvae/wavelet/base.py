@@ -24,7 +24,7 @@ def dwt2d(image: Tensor, wavelet: WaveletBase, level: int = 1) -> dict[str, Tens
     2次元離散ウェーブレット変換を実行
     
     Parameters:
-        image: 入力画像（2次元numpy配列）
+        image: 入力画像
         wavelet: ウェーブレットオブジェクト
         level: 分解レベル
         
@@ -102,7 +102,7 @@ def dwt3d(images: Tensor, wavelet: WaveletBase, level: int = 1) -> dict[str, Ten
     3次元離散ウェーブレット変換
     
     Parameters:
-        images: 入力データ (3次元numpy配列)
+        images: 入力データ
         wavelet: ウェーブレットオブジェクト
         level: 分解レベル
         
