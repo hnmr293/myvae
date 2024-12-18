@@ -28,7 +28,7 @@ def load_model(path: Path):
     sd = torch.load(path, weights_only=True, map_location='cpu')
     conf = sd.pop('config')
     
-    from myvae import VAE, VAE3D, VAE3DWavelet
+    from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet
     from myvae.train import parse_dict
     
     if 'model' in conf and 'class_path' not in conf['model']:
@@ -40,7 +40,7 @@ def load_model(path: Path):
         }
     init = parse_dict(conf, only_model=True, without_data=True)
     model = init.model
-    assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
+    assert isinstance(model, (VAE, VAE3D, VAEWavelet, VAE3DWavelet))
     
     sd = sd.pop('state_dict')
     # remove compile wrapper
@@ -123,7 +123,7 @@ def main():
     import torch.nn.functional as tf
     from torchvision.transforms.functional import to_tensor, normalize, to_pil_image
     import einops
-    from myvae import VAE, VAE3D, VAE3DWavelet
+    from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet
     
     def calc_psnr(img1: torch.Tensor, img2: torch.Tensor):
         while img1.ndim < 4: img1 = img1[None]

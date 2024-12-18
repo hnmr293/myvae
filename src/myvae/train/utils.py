@@ -4,11 +4,11 @@ import torch.nn.functional as tf
 from torchvision.utils import make_grid as tv_make_grid
 import einops
 
-from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
+from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet, VAEOutput
 
 
 def restore_states(
-    model: VAE|VAE3D|VAE3DWavelet,
+    model: VAE|VAE3D|VAEWavelet|VAE3DWavelet,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     state_dict: dict[str, Tensor],
@@ -25,7 +25,7 @@ def restore_states(
 
 
 def restore_model_state(
-    model: VAE|VAE3D|VAE3DWavelet,
+    model: VAE|VAE3D|VAEWavelet|VAE3DWavelet,
     state_dict: dict[str, Tensor],
 ):
     # remove compile wrapper
@@ -37,7 +37,7 @@ def restore_model_state(
 
 
 def restore_optimizer_state(
-    model: VAE|VAE3D|VAE3DWavelet,
+    model: VAE|VAE3D|VAEWavelet|VAE3DWavelet,
     optimizer: torch.optim.Optimizer,
     state_dict: dict,
 ):
@@ -91,7 +91,7 @@ def restore_optimizer_state(
 
 
 def restore_scheduler_state(
-    model: VAE|VAE3D|VAE3DWavelet,
+    model: VAE|VAE3D|VAEWavelet|VAE3DWavelet,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     state_dict: dict,
 ):

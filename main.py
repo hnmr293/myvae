@@ -11,7 +11,7 @@ from accelerate import Accelerator
 from accelerate.utils import tqdm, gather_object, TorchDynamoPlugin
 import wandb
 
-from myvae import VAE, VAE3D, VAE3DWavelet, VAEOutput
+from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet, VAEOutput
 from myvae.train import TrainConf
 import myvae.train.loss as losses
 from myvae.train.utils import gather_images, make_grid
@@ -148,7 +148,7 @@ def save_model(
 
 def train(
     acc: Accelerator,
-    model: VAE|VAE3D|VAE3DWavelet,
+    model: VAE|VAE3D|VAEWavelet|VAE3DWavelet,
     data: DataLoader,
     val_data: DataLoader,
     train_conf: TrainConf,
@@ -348,7 +348,7 @@ def run_train(init, conf_dict):
     val_data = init.val_dataloader
     train_conf = init.train
     
-    assert isinstance(model, (VAE, VAE3D, VAE3DWavelet))
+    assert isinstance(model, (VAE, VAE3D, VAEWavelet, VAE3DWavelet))
     assert isinstance(data, DataLoader)
     assert isinstance(val_data, DataLoader)
     assert isinstance(train_conf, TrainConf)

@@ -7,9 +7,9 @@ import torch
 from torch import nn, Tensor
 
 from .configs import VAEConfig, EncoderConfig, DecoderConfig
-from .encoder import Encoder, Encoder3D, Encoder3DWavelet
+from .encoder import Encoder, Encoder3D, EncoderWavelet, Encoder3DWavelet
 from .decoder import Decoder, Decoder3D
-from ..wavelet import dwt3d, idwt3d, WaveletFID1d, HaarWavelet, Daubechies4Wavelet, ComplexDualTreeWavelet
+from ..wavelet import dwt2d, dwt3d, WaveletFID1d, HaarWavelet, Daubechies4Wavelet, ComplexDualTreeWavelet
 
 
 @dataclass
@@ -265,6 +265,28 @@ class VAEWavelet1dBase(VAEBase):
     def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
+
+
+class VAEWavelet(VAEWavelet1dBase):
+    def __init__(self, config: VAEConfig):
+        super().__init__()
+        self.encoder = EncoderWavelet(config.encoder)
+        self.decoder = Decoder(config.decoder)
+        self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
+
+    def dwt(self, gray: Tensor) -> list[Tensor]:
+        # x := (b, h, w)
+        
+        dwt = dwt2d(gray, self.wavelet, level=self.wavelet.max_level)
+        
+        keys = ('LL', 'LH', 'HL', 'HH')
+        ret = _gather_dwt(dwt, keys, stack_dim=1)
+        # 各キーに対応するテンソルは (b, h, w) になっている
+        # 返ってきたテンソルは (b, c, h, w) にする
+        
+        assert len(ret) == self.wavelet.max_level
+        
+        return ret
 
 
 class VAE3DWavelet(VAEWavelet1dBase):
