@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch import Tensor
 from .base import WaveletBase
 
 
@@ -13,10 +14,10 @@ class WaveletFID(WaveletBase):
 class WaveletFID1d(WaveletFID):
     """分離可能なFIDフィルタを用いたウェーブレット"""
     
-    lo_d: torch.Tensor
-    hi_d: torch.Tensor
-    lo_r: torch.Tensor
-    hi_r: torch.Tensor
+    lo_d: Tensor
+    hi_d: Tensor
+    lo_r: Tensor
+    hi_r: Tensor
     
     _name: str
     
@@ -38,7 +39,7 @@ class WaveletFID1d(WaveletFID):
     def _init_kernel(
         self,
         name: str,
-        kernel: torch.Tensor,
+        kernel: Tensor,
         parameterize: bool,
         max_level: int,
     ):

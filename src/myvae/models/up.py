@@ -1,5 +1,4 @@
-import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as tf
 
 from .configs import DecoderConfig
@@ -22,7 +21,7 @@ class DecoderBlock(nn.Module):
         else:
             self.up = nn.Identity()
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         for block in self.resblocks:
             x = block(x)
         x = self.up(x)
@@ -62,7 +61,7 @@ class DecoderBlock3D(nn.Module):
             self.up = nn.Identity()
             self.scale_factor = ()
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         for block in self.resblocks:
             x = block(x)
         x = self.up(x, *self.scale_factor)
@@ -80,5 +79,5 @@ INTERPOLATION_MODE = [
 ]
 
 class Upsample2xNearest(nn.Module):
-    def forward(self, x: torch.Tensor, scale_factor: float|tuple[float,...] = 2.0) -> torch.Tensor:
+    def forward(self, x: Tensor, scale_factor: float|tuple[float,...] = 2.0) -> Tensor:
         return tf.interpolate(x, scale_factor=scale_factor, mode='nearest')

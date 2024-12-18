@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import logging
 
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 
 from .configs import VAEConfig, EncoderConfig, DecoderConfig
 from .encoder import Encoder, Encoder3D, Encoder3DWavelet
@@ -12,8 +12,8 @@ from ..wavelet import dwt3d, idwt3d, HaarWavelet, Daubechies4Wavelet, ComplexDua
 
 @dataclass
 class EncoderOutput:
-    mean: torch.Tensor
-    logvar: torch.Tensor
+    mean: Tensor
+    logvar: Tensor
     
     @property
     def var(self):
@@ -50,7 +50,7 @@ class EncoderOutput:
 
 @dataclass
 class DecoderOutput:
-    value: torch.Tensor
+    value: Tensor
     
     def clone(self):
         return DecoderOutput(self.value.clone())
@@ -61,7 +61,7 @@ class DecoderOutput:
 
 @dataclass
 class VAEOutput:
-    input: torch.Tensor
+    input: Tensor
     encoder_output: EncoderOutput
     decoder_output: DecoderOutput
     
@@ -86,18 +86,18 @@ class VAE(nn.Module):
     def device(self):
         return next(self.parameters()).device
     
-    def encode(self, x: torch.Tensor) -> EncoderOutput:
+    def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
         z_mean, z_logvar = z.chunk(2, dim=1)
         return EncoderOutput(z_mean, z_logvar)
     
-    def decode(self, z: torch.Tensor) -> DecoderOutput:
+    def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
     
     def forward(
         self,
-        x: torch.Tensor,
+        x: Tensor,
         det: bool = False,
         rng: torch.Generator|None = None
     ) -> VAEOutput:
@@ -132,18 +132,18 @@ class VAE3D(nn.Module):
     def device(self):
         return next(self.parameters()).device
     
-    def encode(self, x: torch.Tensor) -> EncoderOutput:
+    def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
         z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
     
-    def decode(self, z: torch.Tensor) -> DecoderOutput:
+    def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
     
     def forward(
         self,
-        x: torch.Tensor,
+        x: Tensor,
         det: bool = False,
         rng: torch.Generator|None = None
     ) -> VAEOutput:
@@ -200,7 +200,7 @@ class VAE3DWavelet(nn.Module):
     def device(self):
         return next(self.parameters()).device
     
-    def get_dwt(self, x: torch.Tensor) -> list[torch.Tensor]:
+    def get_dwt(self, x: Tensor) -> list[Tensor]:
         # x := (b, f, c, h, w)
         # gray = 0.299R + 0.587G + 0.114B
         gray = x[:, :, 0, :, :] * 0.299 + x[:, :, 1, :, :] * 0.587 + x[:, :, 2, :, :] * 0.114
@@ -223,20 +223,20 @@ class VAE3DWavelet(nn.Module):
         
         return ret
     
-    def encode(self, x: torch.Tensor, dwt: list[torch.Tensor]|None = None) -> EncoderOutput:
+    def encode(self, x: Tensor, dwt: list[Tensor]|None = None) -> EncoderOutput:
         if dwt is None:
             dwt = self.get_dwt(x)
         z = self.encoder(x, dwt)
         z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
     
-    def decode(self, z: torch.Tensor) -> DecoderOutput:
+    def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
     
     def forward(
         self,
-        x: torch.Tensor,
+        x: Tensor,
         det: bool = False,
         rng: torch.Generator|None = None
     ) -> VAEOutput:

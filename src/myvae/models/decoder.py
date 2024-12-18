@@ -1,7 +1,7 @@
 import functools
 
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 from torch.utils.checkpoint import checkpoint
 
 from .configs import DecoderConfig
@@ -62,7 +62,7 @@ class Decoder(nn.Module):
         else:
             return self.mid_blocks
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, z: Tensor) -> Tensor:
         x = z
         
         x = self.conv_in(x)
@@ -142,7 +142,7 @@ class Decoder3D(nn.Module):
         else:
             return self.mid_blocks
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, z: Tensor) -> Tensor:
         x = z
         B, F, C, H, W = x.shape
         # (b, f, c, h, w)

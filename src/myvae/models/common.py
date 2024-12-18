@@ -1,5 +1,4 @@
-import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as tf
 import einops
 
@@ -21,7 +20,7 @@ class ResBlock(nn.Module):
         else:
             self.conv0 = nn.Conv2d(in_dim, out_dim, kernel_size=1)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         h = x
         
         h = self.norm1(h)
@@ -52,7 +51,7 @@ class ResBlock3D(nn.Module):
         else:
             self.conv0 = nn.Conv3d(in_dim, out_dim, kernel_size=1)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         h = x
         
         h = self.norm1(h)
@@ -80,7 +79,7 @@ class Attention(nn.Module):
         self.attn_dropout = config.attention.dropout
         assert dim % self.num_heads == 0
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         assert x.ndim == 4
         # x := (B, C, H, W)
         B, C, H, W = x.shape
@@ -117,7 +116,7 @@ class FactorizedAttention3D(nn.Module):
         self.attn_dropout = config.attention.dropout
         assert dim % self.num_heads == 0
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         assert x.ndim == 5
         # x := (B, C, F, H, W)
         B, C, F, H, W = x.shape

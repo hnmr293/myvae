@@ -1,7 +1,7 @@
 import functools
 
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 from torch.utils.checkpoint import checkpoint
 import einops
 
@@ -64,7 +64,7 @@ class Encoder(nn.Module):
         else:
             return self.mid_blocks
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         z = x
         
         z = self.conv_in(z)
@@ -144,7 +144,7 @@ class Encoder3D(nn.Module):
         else:
             return self.mid_blocks
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         z = x
         B, F, C, H, W = z.shape
         # (b, f, c, h, w)
@@ -267,7 +267,7 @@ class Encoder3DWavelet(nn.Module):
         else:
             return self.mid_blocks
     
-    def forward(self, x: torch.Tensor, dwts: list[torch.Tensor]) -> torch.Tensor:
+    def forward(self, x: Tensor, dwts: list[Tensor]) -> Tensor:
         assert len(dwts) == self.level
         
         z = x
@@ -324,7 +324,7 @@ class WaveletBlock(nn.Module):
         self.conv = nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1)
         self.block = EncoderBlock3D(out_dim, out_dim, down=False, down_t=False, config=config)
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         # x: dwt (b, in_dim, f, h, w)
         B = x.size(0)
         

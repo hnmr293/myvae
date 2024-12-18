@@ -1,6 +1,4 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as tf
+from torch import nn, Tensor
 
 from .configs import EncoderConfig, DecoderConfig
 from .common import ResBlock, ResBlock3D, Attention, FactorizedAttention3D
@@ -18,7 +16,7 @@ class MidBlock(nn.Module):
             for _ in range(config.num_mid_attns)
         ])
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         x = self.resblock(x)
         for block in self.attns:
             x = block(x)
@@ -37,7 +35,7 @@ class MidBlock3D(nn.Module):
             for _ in range(config.num_mid_attns)
         ])
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         x = self.resblock(x)
         for block in self.attns:
             x = block(x)

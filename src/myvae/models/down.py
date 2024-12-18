@@ -1,6 +1,4 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as tf
+from torch import nn, Tensor
 
 from .configs import EncoderConfig
 from .common import ResBlock, ResBlock3D
@@ -29,7 +27,7 @@ class EncoderBlock(nn.Module):
         else:
             self.down = nn.Identity()
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         for block in self.resblocks:
             x = block(x)
         x = self.down(x)
@@ -77,7 +75,7 @@ class EncoderBlock3D(nn.Module):
                 nn.Conv3d(out_dim, out_dim, kernel_size=3, stride=stride),
             )
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         for block in self.resblocks:
             x = block(x)
         x = self.down(x)
