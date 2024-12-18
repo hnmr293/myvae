@@ -211,6 +211,23 @@ def _gather_dwt(
         ret.append(t)
         cur = cur.get(next_key, None)
     
+    # dwt はパディングしてから処理を行う実装になっているため、
+    # 奇数サイズの画像を渡すと切り上げたサイズのデータが返ってくる
+    # 一方で VAE の方は切り捨てで処理しているため、
+    # 端の 1px 分を捨てる必要がある
+    
+    # ただし、VAE に渡ってくるデータのサイズは縮小率の倍数になっているはずなので
+    # そういうことは本来起こらないはず……
+    
+    #ret2 = [ret[0]]
+    #for before, dwt_ in zip(ret[:-1], ret[1:]):
+    #    w0, h0 = before.size(-2), before.size(-1)
+    #    if w0 % 2 == 1:
+    #        dwt_ = dwt_[..., :, :-1]
+    #    if h0 % 2 == 1:
+    #        dwt_ = dwt_[..., :-1, :]
+    #    ret2.append(dwt_)
+    
     return ret
 
 
