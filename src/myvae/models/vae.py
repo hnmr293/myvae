@@ -180,7 +180,6 @@ def _get_wavelet(config: EncoderConfig, max_level: int):
         wavelet_type = 'haar'
     
     param = config.wavelet_parameterized
-    max_level = len(config.layer_out_dims) - 2
     
     if wavelet_type == 'haar':
         return HaarWavelet(param, max_level)
