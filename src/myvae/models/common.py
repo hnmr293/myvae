@@ -93,10 +93,12 @@ class Attention(nn.Module):
         q, k, v = einops.rearrange(h, 'b n (k t d) -> t b k n d', t=3, k=self.num_heads)
         h = tf.scaled_dot_product_attention(q, k, v, dropout_p=self.attn_dropout)
         
+        h = einops.rearrange(h, 'b k n d -> b n (k d)')
+        
         h = self.out(h)
         h = self.dropout(h)
         
-        h = einops.rearrange(h, 'b k (h w) d -> b (k d) h w', h=H, w=W)
+        h = einops.rearrange(h, 'b (h w) c -> b c h w', h=H, w=W)
         #assert h.size(1) == C
         
         return x + h
