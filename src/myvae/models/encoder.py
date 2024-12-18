@@ -193,7 +193,7 @@ class Encoder3DWavelet(nn.Module):
         self.conv_in = nn.Conv2d(config.in_dim, config.layer_out_dims[0], kernel_size=3, padding=1)
         last_dim = self.conv_in.out_channels
         
-        dwt_in_dim = 8
+        dwt_in_dim = 8  # (L,H)^3
         num_blocks = len(config.layer_out_dims)
         self.down_blocks = nn.ModuleList()
         self.dwt_blocks = nn.ModuleList()
@@ -202,7 +202,8 @@ class Encoder3DWavelet(nn.Module):
             if block_id != 0 and block_id != num_blocks - 1:
                 # 最初の1層は元画像
                 # 最後の1層は時間のダウンサンプルなし
-                dwt_block = WaveletBlock(dwt_in_dim, last_dim, config)
+                # なので wavelet からの入力はなし
+                dwt_block = WaveletBlock3D(dwt_in_dim, last_dim, config)
                 self.dwt_blocks.append(dwt_block)
                 last_dim *= 2
             
@@ -318,7 +319,7 @@ class Encoder3DWavelet(nn.Module):
         return self
 
 
-class WaveletBlock(nn.Module):
+class WaveletBlock3D(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, config: EncoderConfig):
         super().__init__()
         self.conv = nn.Conv2d(in_dim, out_dim, kernel_size=3, padding=1)
