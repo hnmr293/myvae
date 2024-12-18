@@ -281,10 +281,10 @@ class VAE3DWavelet(VAEWavelet1dBase):
         dwt = dwt3d(gray, self.wavelet, level=self.wavelet.max_level)
         
         keys = ('LLL', 'LLH', 'LHL', 'LHH', 'HLL', 'HLH', 'HHL', 'HHH')
-        ret = _gather_dwt(dwt, keys, stack_dim=-4)
+        ret = _gather_dwt(dwt, keys, stack_dim=1)
         # 各キーに対応するテンソルは (b, f, h, w) になっている
         # 返ってきたテンソルは (b, c, f, h, w) にする
         
-        assert len(ret) == self.encoder.level
+        assert len(ret) == self.wavelet.max_level
         
         return ret
