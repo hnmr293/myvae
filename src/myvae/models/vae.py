@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import logging
+from typing import Callable
 
 import torch
 from torch import nn, Tensor
@@ -8,7 +9,7 @@ from torch import nn, Tensor
 from .configs import VAEConfig, EncoderConfig, DecoderConfig
 from .encoder import Encoder, Encoder3D, Encoder3DWavelet
 from .decoder import Decoder, Decoder3D
-from ..wavelet import dwt3d, idwt3d, HaarWavelet, Daubechies4Wavelet, ComplexDualTreeWavelet
+from ..wavelet import dwt3d, idwt3d, WaveletFID1d, HaarWavelet, Daubechies4Wavelet, ComplexDualTreeWavelet
 
 
 @dataclass
@@ -73,7 +74,17 @@ class VAEOutput:
         return VAEOutput(self.input.to(*args, **kwargs), self.encoder_output.to(*args, **kwargs), self.decoder_output.to(*args, **kwargs))
 
 
+
+"""
+
+普通の VAE
+
+"""
+
+
 class VAEBase(ABC, nn.Module):
+    """VAEのベースクラス"""
+    
     @property
     def dtype(self):
         return next(self.parameters()).dtype
@@ -114,39 +125,55 @@ class VAEBase(ABC, nn.Module):
         return self
 
 
-class VAE(VAEBase):
+class VAEBase1(VAEBase):
+    """
+    普通の VAE のベースクラス
+    
+    以下の2つの子モジュールを持っていること
+    - self.encoder
+    - self.decoder
+    
+    また、self.encoder および self.decoder は Callable[[Tensor], Tensor] であること
+    """
+    
+    # intersection type が欲しい……
+    encoder: nn.Module | Callable[[Tensor], Tensor]
+    decoder: nn.Module | Callable[[Tensor], Tensor]
+    
+    def encode(self, x: Tensor) -> EncoderOutput:
+        z = self.encoder(x)
+        z_mean, z_logvar = z.chunk(2, dim=-3)
+        return EncoderOutput(z_mean, z_logvar)
+    
+    def decode(self, z: Tensor) -> DecoderOutput:
+        x = self.decoder(z)
+        return DecoderOutput(x)
+
+
+class VAE(VAEBase1):
     def __init__(self, config: VAEConfig):
         super().__init__()
         self.encoder = Encoder(config.encoder)
         self.decoder = Decoder(config.decoder)
-    
-    def encode(self, x: Tensor) -> EncoderOutput:
-        z = self.encoder(x)
-        z_mean, z_logvar = z.chunk(2, dim=-3)
-        return EncoderOutput(z_mean, z_logvar)
-    
-    def decode(self, z: Tensor) -> DecoderOutput:
-        x = self.decoder(z)
-        return DecoderOutput(x)
 
 
-class VAE3D(VAEBase):
+class VAE3D(VAEBase1):
     def __init__(self, config: VAEConfig):
         super().__init__()
         self.encoder = Encoder3D(config.encoder)
         self.decoder = Decoder3D(config.decoder)
-    
-    def encode(self, x: Tensor) -> EncoderOutput:
-        z = self.encoder(x)
-        z_mean, z_logvar = z.chunk(2, dim=-3)
-        return EncoderOutput(z_mean, z_logvar)
-    
-    def decode(self, z: Tensor) -> DecoderOutput:
-        x = self.decoder(z)
-        return DecoderOutput(x)
+
+
+"""
+
+ウェーブレット変換を用いた VAE
+
+"""
 
 
 def _get_wavelet(config: EncoderConfig, max_level: int):
+    """設定からウェーブレットを取得する便利メソッド"""
+    
     wavelet_type = config.wavelet_type
     if wavelet_type is None:
         logging.warning('wavelet_type is None; use "haar" instead')
@@ -167,39 +194,71 @@ def _get_wavelet(config: EncoderConfig, max_level: int):
     raise RuntimeError(f'unknown wavelet type: {wavelet_type}')
 
 
-class VAE3DWavelet(VAEBase):
-    def __init__(self, config: VAEConfig):
-        super().__init__()
-        self.encoder = Encoder3DWavelet(config.encoder)
-        self.decoder = Decoder3D(config.decoder)
-        self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
+def _gather_dwt(
+    dwt: dict[str, Tensor],
+    keys: tuple[str,...],
+    stack_dim: int,
+    next_key: str = 'next',
+) -> list[Tensor]:
+    """
+    { ..., next: { ... } } 形式の辞書を再帰的に探索して、与えられた keys に対応する Tensor のリストを返す
+    同じ階層に属する Tensor は torch.stack で結合される
+    """
+
+    cur = dwt
+    ret = []
+    while cur is not None:
+        t = torch.stack([cur[key] for key in keys], dim=stack_dim)
+        ret.append(t)
+        cur = cur.get(next_key, None)
     
-    def get_dwt(self, x: Tensor) -> list[Tensor]:
-        # x := (b, f, c, h, w)
+    return ret
+
+
+class VAEWavelet1dBase(VAEBase):
+    """
+    分離可能なフィルタによるウェーブレット変換を用いた VAE のベースクラス
+    
+    以下の3つの子モジュールを持っていること
+    - self.encoder
+    - self.decoder
+    - self.wavelet
+    
+    self.encoder および self.decoder は Callable[[Tensor, list[Tensor]], Tensor] であること
+    self.wavelet は WaveletFID1d であること
+    """
+    
+    # intersection type が欲しい……
+    encoder: nn.Module | Callable[[Tensor, list[Tensor]], Tensor]
+    decoder: nn.Module | Callable[[Tensor, list[Tensor]], Tensor]
+    wavelet: WaveletFID1d
+    
+    @abstractmethod
+    def dwt(self, gray: Tensor) -> list[Tensor]:
+        """グレースケール化された画像を分解する"""
+        pass
+    
+    def decompose(self, x: Tensor) -> list[Tensor]:
+        """
+        入力をウェーブレット変換により分解する
+        入力は RGB 画像であることを前提にする
+        """
+        
+        # x := (b, ..., c, h, w)
+        
+        assert x.size(-3) == 3, f'画像がRGB形式ではありません：shape={x.shape}'
+        
+        # グレースケール化
         # gray = 0.299R + 0.587G + 0.114B
-        gray = x[:, :, 0, :, :] * 0.299 + x[:, :, 1, :, :] * 0.587 + x[:, :, 2, :, :] * 0.114
-        # (b, f, h, w)
-        dwt = dwt3d(gray, self.wavelet, level=self.encoder.level)
+        r, g, b = x.unbind(dim=-3)
+        gray = r * 0.299 + g * 0.587 + b * 0.114
+        # (b, ..., h, w)
         
-        cur = dwt
-        ret = []
-        while cur is not None:
-            t = torch.stack([
-                cur[key] for key
-                # (b, f, h, w)
-                in ('LLL', 'LLH', 'LHL', 'LHH', 'HLL', 'HLH', 'HHL', 'HHH')
-            ], dim=1)
-            # (b, c, f, h, w)
-            ret.append(t)
-            cur = cur.get('next', None)
-        
-        assert len(ret) == self.encoder.level
-        
-        return ret
+        return self.dwt(gray)
     
     def encode(self, x: Tensor, dwt: list[Tensor]|None = None) -> EncoderOutput:
         if dwt is None:
-            dwt = self.get_dwt(x)
+            dwt = self.decompose(x)
         z = self.encoder(x, dwt)
         z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
@@ -207,3 +266,25 @@ class VAE3DWavelet(VAEBase):
     def decode(self, z: Tensor) -> DecoderOutput:
         x = self.decoder(z)
         return DecoderOutput(x)
+
+
+class VAE3DWavelet(VAEWavelet1dBase):
+    def __init__(self, config: VAEConfig):
+        super().__init__()
+        self.encoder = Encoder3DWavelet(config.encoder)
+        self.decoder = Decoder3D(config.decoder)
+        self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
+
+    def dwt(self, gray: Tensor) -> list[Tensor]:
+        # x := (b, f, h, w)
+        
+        dwt = dwt3d(gray, self.wavelet, level=self.wavelet.max_level)
+        
+        keys = ('LLL', 'LLH', 'LHL', 'LHH', 'HLL', 'HLH', 'HHL', 'HHH')
+        ret = _gather_dwt(dwt, keys, stack_dim=-4)
+        # 各キーに対応するテンソルは (b, f, h, w) になっている
+        # 返ってきたテンソルは (b, c, f, h, w) にする
+        
+        assert len(ret) == self.encoder.level
+        
+        return ret

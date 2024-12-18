@@ -14,6 +14,9 @@ class WaveletFID(WaveletBase):
 class WaveletFID1d(WaveletFID):
     """分離可能なFIDフィルタを用いたウェーブレット"""
     
+    parameterized: bool
+    max_level: int
+    
     lo_d: Tensor
     hi_d: Tensor
     lo_r: Tensor
