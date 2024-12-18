@@ -4,15 +4,14 @@ dataset:
     class_path: myvae.train.dataset.ImageDataset
     init_args:
         data_dir: 訓練用データセットへのパス（ここで指定したディレクトリの直下に画像を置く）
-        aug_flip_lr: false
-        aug_flip_tb: false
+        filters:
+            - FlipLR
+            - FlipTB
 
 val_dataset:
     class_path: myvae.train.dataset.ImageDataset
     init_args:
         data_dir: 検証用データセットへのパス（ここで指定したディレクトリの直下に画像を置く）
-        aug_flip_lr: false
-        aug_flip_tb: false
 
 dataloader:
     class_path: torch.utils.data.DataLoader

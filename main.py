@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 from concurrent.futures import Future
 import gc
@@ -16,6 +17,7 @@ from myvae.train import TrainConf
 import myvae.train.loss as losses
 from myvae.train.utils import gather_images, make_grid
 from myvae.train.metrics import psnr, ssim
+from myvae.train.dataset_filters import Filters
 
 
 class ModelSaver:
@@ -75,7 +77,6 @@ class ModelSaverHf(ModelSaver):
         
         upload_file = self.api.upload_file
         if self.use_async:
-            from functools import partial
             upload_file = partial(self.api.run_as_future, upload_file)
         
         if self.last_future is not None:
@@ -385,8 +386,11 @@ def run_train(init, conf_dict):
     # エンコーダの縮小率
     r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)
     
+    batch_filters = getattr(data.dataset, 'batch_filters', None) or Filters()
+    val_batch_filters = getattr(val_data.dataset, 'batch_filters', None) or Filters()
+    
     # 画像サイズが異なるときの対応
-    def collate_fn(data: list[torch.Tensor]):
+    def collate_fn(data: list[torch.Tensor], batch_filters: Filters):
         assert isinstance(data, (tuple, list))
         assert all(isinstance(t, torch.Tensor) for t in data)
         if data[0].ndim == 3:
@@ -403,19 +407,22 @@ def run_train(init, conf_dict):
         width = min(t.size(-1) for t in data)
         height = min(t.size(-2) for t in data)
         
-        # エンコーダの縮小率に合わせる
-        width = width & ~(r - 1)
-        height = height & ~(r - 1)
-        
         result = []
         for t in data:
             t = t[:, :height, :width]
             result.append(t)
         
-        return torch.stack(result, dim=0)
+        result = torch.stack(result, dim=0)
+        result = batch_filters(result)
+        
+        # エンコーダの縮小率に合わせる
+        width = result.size(-1) & ~(r - 1)
+        height = result.size(-2) & ~(r - 1)
+        
+        return result[..., :height, :width]
     
-    data.collate_fn = collate_fn
-    val_data.collate_fn = collate_fn
+    data.collate_fn = partial(collate_fn, batch_filters=batch_filters)
+    val_data.collate_fn = partial(collate_fn, batch_filters=val_batch_filters)
     
     # モデルの保存先
     if train_conf.hf_repo_id is not None:

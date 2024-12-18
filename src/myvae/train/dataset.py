@@ -10,6 +10,8 @@ import torchvision.transforms as tvt
 import torchvision.transforms.functional as tvf
 from torchvision.io import VideoReader
 
+from .dataset_filters import Filters, Base as Filter
+
 
 class DummyDataset(Dataset):
     def __init__(
@@ -40,6 +42,8 @@ class WebpDataset(Dataset):
         sort: bool = True,
         aug_flip_lr: bool = False,
         aug_flip_tb: bool = False,
+        filters: Filters|list[Filter]|None = None,
+        batch_filters: Filters|list[Filter]|None = None,
     ):
         super().__init__()
         
@@ -57,6 +61,8 @@ class WebpDataset(Dataset):
         ])
         self.aug_flip_lr = aug_flip_lr
         self.aug_flip_tb = aug_flip_tb
+        self.filters = Filters(filters or [])
+        self.batch_filters = Filters(batch_filters or [])  # あとで DataLoader の collate_fn から使われる
     
     def __len__(self):
         return len(self.data)
@@ -68,6 +74,7 @@ class WebpDataset(Dataset):
             tensor = tensor.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
             tensor = tensor.flip(dims=(-2,))
+        tensor = self.filters(tensor)
         return tensor
 
 
@@ -79,6 +86,8 @@ class ImageDataset(Dataset):
         sort: bool = True,
         aug_flip_lr: bool = False,
         aug_flip_tb: bool = False,
+        filters: Filters|list[Filter]|None = None,
+        batch_filters: Filters|list[Filter]|None = None,
     ):
         super().__init__()
         
@@ -104,6 +113,8 @@ class ImageDataset(Dataset):
         
         self.aug_flip_lr = aug_flip_lr
         self.aug_flip_tb = aug_flip_tb
+        self.filters = Filters(filters or [])
+        self.batch_filters = Filters(batch_filters or [])  # あとで DataLoader の collate_fn から使われる
     
     def __len__(self):
         return len(self.data)
@@ -115,6 +126,7 @@ class ImageDataset(Dataset):
             tensor = tensor.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
             tensor = tensor.flip(dims=(-2,))
+        tensor = self.filters(tensor)
         return tensor
 
 
@@ -129,6 +141,8 @@ class VideoDataset(Dataset):
         sort: bool = False,
         aug_flip_lr: bool = False,
         aug_flip_tb: bool = False,
+        filters: Filters|list[Filter]|None = None,
+        batch_filters: Filters|list[Filter]|None = None,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -149,6 +163,9 @@ class VideoDataset(Dataset):
         
         self.aug_flip_lr = aug_flip_lr
         self.aug_flip_tb = aug_flip_tb
+        
+        self.filters = Filters(filters or [])
+        self.batch_filters = Filters(batch_filters or [])  # あとで DataLoader の collate_fn から使われる
     
     def __len__(self):
         return len(self.data)
@@ -222,5 +239,7 @@ class VideoDataset(Dataset):
             frames = frames.flip(dims=(-1,))
         if self.aug_flip_tb and random.random() < 0.5:
             frames = frames.flip(dims=(-2,))
+        
+        frames = self.filters(frames)
         
         return frames
