@@ -13,8 +13,6 @@ class Watchdog:
         self.process = subprocess.Popen(
             [python, prog, *args],
             start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
         print(f'start watchdog {prog} [PID={self.process.pid}]')
     
