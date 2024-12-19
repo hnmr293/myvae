@@ -16,7 +16,6 @@ class Watchdog:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        #logging.info(f'start watchdog {prog} [PID={self.process.pid}]')
         print(f'start watchdog {prog} [PID={self.process.pid}]')
     
     def close(self):
@@ -24,14 +23,19 @@ class Watchdog:
             self.process.send_signal(signal.SIGINT)
         except Exception as e:
             logging.error(e)
-            #print(e, file=sys.stderr)
     
     @property
     def pid(self):
         return self.process.pid
     
     def notify1(self):
-        os.kill(self.process.pid, signal.SIGUSR1)
+        try:
+            os.kill(self.process.pid, signal.SIGUSR1)
+        except Exception as e:
+            logging.error(e)
     
     def notify2(self):
-        os.kill(self.process.pid, signal.SIGUSR2)
+        try:
+            os.kill(self.process.pid, signal.SIGUSR2)
+        except Exception as e:
+            logging.error(e)

@@ -2,6 +2,7 @@ from functools import partial
 from pathlib import Path
 from concurrent.futures import Future
 import gc
+import logging
 from typing import Callable, Any
 
 import numpy as np
@@ -98,8 +99,7 @@ class ModelSaverHf(ModelSaver):
             try:
                 self.last_future.result()
             except Exception as e:
-                import sys
-                print(str(e), file=sys.stderr)
+                logging.error(e)
             self.last_future = None
 
 
