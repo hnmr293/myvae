@@ -190,6 +190,12 @@ def train(
             pbar.set_description(f'[Epoch {epoch}]')
             
             for step, batch in enumerate(pbar):
+                if step == 10:
+                    # コンパイル処理などにより、最初の数ステップが極端に遅くなることがある
+                    # その影響を除外するため、適当なところで tqdm のタイマ処理をリセットする
+                    # とりあえず 10 ステップ完了時にしておく
+                    pbar.unpause()
+                
                 lr = scheduler.get_last_lr()[0]  # for logging
                 
                 with acc.autocast(), acc.accumulate(model):
