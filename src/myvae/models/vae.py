@@ -93,6 +93,11 @@ class VAEBase(ABC, nn.Module):
     def device(self):
         return next(self.parameters()).device
     
+    @property
+    @abstractmethod
+    def is_deterministic(self):
+        pass
+    
     @abstractmethod
     def encode(self, x: Tensor) -> EncoderOutput:
         pass
@@ -104,12 +109,11 @@ class VAEBase(ABC, nn.Module):
     def forward(
         self,
         x: Tensor,
-        det: bool = False,
         rng: torch.Generator|None = None,
     ) -> VAEOutput:
         encoded = self.encode(x)
         
-        if det:
+        if self.is_deterministic:
             z = encoded.mean
         else:
             z = encoded.sample(rng)
@@ -125,7 +129,33 @@ class VAEBase(ABC, nn.Module):
         return self
 
 
-class VAEBase1(VAEBase):
+class VAEBaseWithConfig(VAEBase):
+    """
+    VAEConfig を受け取る VAEBase
+    """
+    
+    def __init__(self, config: VAEConfig):
+        super().__init__()
+        
+        # エンコーダとデコーダの入出力の次元を確認する
+        enc_out_dim = config.encoder.out_dim
+        dec_in_dim = config.decoder.in_dim
+        
+        if enc_out_dim == dec_in_dim:
+            # AE
+            self._is_deterministic = True
+        elif enc_out_dim == dec_in_dim * 2:
+            # VAE
+            self._is_deterministic = False
+        else:
+            raise RuntimeError(f'masmatched dim: the encoder outputs {enc_out_dim} channels, but the decoder receives {dec_in_dim} channels')
+    
+    @property
+    def is_deterministic(self):
+        return self._is_deterministic
+
+
+class VAEBase1(VAEBaseWithConfig):
     """
     普通の VAE のベースクラス
     
@@ -142,7 +172,11 @@ class VAEBase1(VAEBase):
     
     def encode(self, x: Tensor) -> EncoderOutput:
         z = self.encoder(x)
-        z_mean, z_logvar = z.chunk(2, dim=-3)
+        if self.is_deterministic:
+            z_mean = z
+            z_logvar = torch.full_like(z_mean, float('-inf'))
+        else:
+            z_mean, z_logvar = z.chunk(2, dim=-3)
         return EncoderOutput(z_mean, z_logvar)
     
     def decode(self, z: Tensor) -> DecoderOutput:
@@ -152,14 +186,14 @@ class VAEBase1(VAEBase):
 
 class VAE(VAEBase1):
     def __init__(self, config: VAEConfig):
-        super().__init__()
+        super().__init__(config)
         self.encoder = Encoder(config.encoder)
         self.decoder = Decoder(config.decoder)
 
 
 class VAE3D(VAEBase1):
     def __init__(self, config: VAEConfig):
-        super().__init__()
+        super().__init__(config)
         self.encoder = Encoder3D(config.encoder)
         self.decoder = Decoder3D(config.decoder)
 
@@ -231,7 +265,7 @@ def _gather_dwt(
     return ret
 
 
-class VAEWavelet1dBase(VAEBase):
+class VAEWavelet1dBase(VAEBaseWithConfig):
     """
     分離可能なフィルタによるウェーブレット変換を用いた VAE のベースクラス
     
@@ -275,8 +309,15 @@ class VAEWavelet1dBase(VAEBase):
     def encode(self, x: Tensor, dwt: list[Tensor]|None = None) -> EncoderOutput:
         if dwt is None:
             dwt = self.decompose(x)
+        
         z = self.encoder(x, dwt)
-        z_mean, z_logvar = z.chunk(2, dim=-3)
+        
+        if self.is_deterministic:
+            z_mean = z
+            z_logvar = torch.full_like(z_mean, float('-inf'))
+        else:
+            z_mean, z_logvar = z.chunk(2, dim=-3)
+        
         return EncoderOutput(z_mean, z_logvar)
     
     def decode(self, z: Tensor) -> DecoderOutput:
@@ -286,7 +327,7 @@ class VAEWavelet1dBase(VAEBase):
 
 class VAEWavelet(VAEWavelet1dBase):
     def __init__(self, config: VAEConfig):
-        super().__init__()
+        super().__init__(config)
         self.encoder = EncoderWavelet(config.encoder)
         self.decoder = Decoder(config.decoder)
         self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
@@ -308,7 +349,7 @@ class VAEWavelet(VAEWavelet1dBase):
 
 class VAE3DWavelet(VAEWavelet1dBase):
     def __init__(self, config: VAEConfig):
-        super().__init__()
+        super().__init__(config)
         self.encoder = Encoder3DWavelet(config.encoder)
         self.decoder = Decoder3D(config.decoder)
         self.wavelet = _get_wavelet(config.encoder, self.encoder.level)
