@@ -343,6 +343,13 @@ def load_model(path: str|Path, init):
     sd = torch.load(path, weights_only=True, map_location='cpu')
     
     metadata = sd.pop('config')
+    if 'model' in metadata and 'class_path' not in metadata['model']:
+        # 旧バージョン対応
+        assert 'config' in metadata['model']
+        metadata['model'] = {
+            'class_path': 'myvae.VAE',
+            'init_args': metadata['model'],
+        }
     
     from myvae.train import parse_dict
     from myvae.train.utils import restore_states
