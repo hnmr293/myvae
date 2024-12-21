@@ -4,3 +4,4 @@ from .models.vae import VAEWavelet, EncoderWavelet
 from .models.vae import VAE3DWavelet, Encoder3DWavelet
 from .models.vae import VAEOutput, EncoderOutput, DecoderOutput
 from .models.configs import VAEConfig, EncoderConfig, DecoderConfig, AttentionConfig
+from .infer import load_model_for_inference

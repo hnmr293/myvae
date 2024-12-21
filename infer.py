@@ -23,36 +23,6 @@ def parse_args():
     return args
 
 
-def load_model(path: Path):
-    import torch
-    sd = torch.load(path, weights_only=True, map_location='cpu')
-    conf = sd.pop('config')
-    
-    from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet
-    from myvae.train import parse_dict
-    
-    if 'model' in conf and 'class_path' not in conf['model']:
-        # 旧バージョン対応
-        assert 'config' in conf['model']
-        conf['model'] = {
-            'class_path': 'myvae.VAE',
-            'init_args': conf['model'],
-        }
-    init = parse_dict(conf, only_model=True, without_data=True)
-    model = init.model
-    assert isinstance(model, (VAE, VAE3D, VAEWavelet, VAE3DWavelet))
-    
-    sd = sd.pop('state_dict')
-    # remove compile wrapper
-    sd = {k.replace('_orig_mod.', ''): v for k, v in sd.items()}
-    
-    model.load_state_dict(sd)
-    
-    model.eval().requires_grad_(False)
-    
-    return model
-
-
 def iter_images(path: Path) -> Iterator[tuple[Path, Image.Image]]:
     assert path.exists()
     
@@ -123,7 +93,7 @@ def main():
     import torch.nn.functional as tf
     from torchvision.transforms.functional import to_tensor, normalize, to_pil_image
     import einops
-    from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet
+    from myvae import VAE, VAE3D, VAEWavelet, VAE3DWavelet, load_model_for_inference
     
     def calc_psnr(img1: torch.Tensor, img2: torch.Tensor):
         while img1.ndim < 4: img1 = img1[None]
@@ -141,7 +111,7 @@ def main():
         device = torch.device(args.device)
         assert isinstance(dtype, torch.dtype)
         
-        model = load_model(args.MODEL).to(dtype=dtype, device=device)
+        model = load_model_for_inference(args.MODEL).to(dtype=dtype, device=device)
         r = 2 ** (len(model.encoder.config.layer_out_dims) - 1)  # 縮小率
         
         is_3d = isinstance(model, (VAE3D, VAE3DWavelet))
