@@ -1,4 +1,5 @@
 import functools
+from abc import ABC, abstractmethod
 
 import torch
 from torch import nn, Tensor
@@ -9,7 +10,17 @@ from .up import DecoderBlock, DecoderBlock3D
 from .mid import MidBlock, MidBlock3D
 
 
-class DecoderBase(nn.Module):
+class DecoderBase(ABC, nn.Module):
+    @property
+    @abstractmethod
+    def in_dim(self) -> int:
+        pass
+    
+    @property
+    @abstractmethod
+    def out_dim(self) -> int:
+        pass
+    
     @property
     def dtype(self):
         return next(self.parameters()).dtype
@@ -83,6 +94,14 @@ class Decoder(BottleneckDecoderBase):
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
     
+    @property
+    def in_dim(self):
+        return self.conv_in.in_channels
+    
+    @property
+    def out_dim(self):
+        return self.conv_out.out_channels
+    
     def forward(self, z: Tensor) -> Tensor:
         x = z
         
@@ -130,6 +149,14 @@ class Decoder3D(BottleneckDecoderBase):
         self.norm_out = nn.GroupNorm(config.num_groups, config.layer_out_dims[-1], eps=config.norm_eps)
         self.act_out = nn.SiLU()
         self.conv_out = nn.Conv2d(config.layer_out_dims[-1], config.out_dim, kernel_size=3, padding=1)
+    
+    @property
+    def in_dim(self):
+        return self.conv_in.in_channels
+    
+    @property
+    def out_dim(self):
+        return self.conv_out.out_channels
     
     def forward(self, z: Tensor) -> Tensor:
         x = z

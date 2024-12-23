@@ -8,6 +8,10 @@ from .common import ResBlock, ResBlock3D
 class DecoderBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, up: bool, config: DecoderConfig):
         super().__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
         self.resblocks = nn.ModuleList()
         
         inout_dims = [(in_dim, out_dim)] + [(out_dim, out_dim)] * (config.num_resblocks_per_layer - 1)
@@ -31,6 +35,10 @@ class DecoderBlock(nn.Module):
 class DecoderBlock3D(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, up: bool, up_t: bool, config: DecoderConfig):
         super().__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
         self.resblocks = nn.ModuleList()
         
         inout_dims = [(in_dim, out_dim)] + [(out_dim, out_dim)] * (config.num_resblocks_per_layer - 1)

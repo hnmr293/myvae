@@ -16,6 +16,16 @@ class MidBlock(nn.Module):
             for _ in range(config.num_mid_attns)
         ])
     
+    @property
+    def in_dim(self) -> int:
+        return self.resblock.in_dim
+    
+    @property
+    def out_dim(self) -> int:
+        if len(self.attns) == 0:
+            return self.resblock.out_dim
+        return self.attns[-1][-1].out_dim
+    
     def forward(self, x: Tensor) -> Tensor:
         x = self.resblock(x)
         for block in self.attns:
@@ -34,6 +44,16 @@ class MidBlock3D(nn.Module):
             ])
             for _ in range(config.num_mid_attns)
         ])
+    
+    @property
+    def in_dim(self) -> int:
+        return self.resblock.in_dim
+    
+    @property
+    def out_dim(self) -> int:
+        if len(self.attns) == 0:
+            return self.resblock.out_dim
+        return self.attns[-1][-1].out_dim
     
     def forward(self, x: Tensor) -> Tensor:
         x = self.resblock(x)

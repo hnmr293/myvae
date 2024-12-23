@@ -19,6 +19,8 @@ class ResBlock(nn.Module):
             self.conv0 = nn.Identity()
         else:
             self.conv0 = nn.Conv2d(in_dim, out_dim, kernel_size=1)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
     
     def forward(self, x: Tensor) -> Tensor:
         h = x
@@ -50,6 +52,8 @@ class ResBlock3D(nn.Module):
             self.conv0 = nn.Identity()
         else:
             self.conv0 = nn.Conv3d(in_dim, out_dim, kernel_size=1)
+        self.in_dim = in_dim
+        self.out_dim = out_dim
     
     def forward(self, x: Tensor) -> Tensor:
         h = x
@@ -78,6 +82,9 @@ class Attention(nn.Module):
         self.num_heads = config.attention.num_heads
         self.attn_dropout = config.attention.dropout
         assert dim % self.num_heads == 0
+        
+        self.in_dim = dim
+        self.out_dim = dim
     
     def forward(self, x: Tensor) -> Tensor:
         assert x.ndim == 4
@@ -115,6 +122,9 @@ class FactorizedAttention3D(nn.Module):
         self.num_heads = config.attention.num_heads
         self.attn_dropout = config.attention.dropout
         assert dim % self.num_heads == 0
+        
+        self.in_dim = dim
+        self.out_dim = dim
     
     def forward(self, x: Tensor) -> Tensor:
         assert x.ndim == 5
