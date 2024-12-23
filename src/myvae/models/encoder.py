@@ -198,7 +198,7 @@ class Encoder3D(BottleneckEncoderBase):
         return z
 
 
-class BottleneckEncoderWaveletBase(ABC, BottleneckEncoderBase):
+class BottleneckEncoderWaveletBase(BottleneckEncoderBase):
     """
     ボトルネック型VAEのエンコーダの基本実装
     子クラスで
